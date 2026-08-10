@@ -1,0 +1,84 @@
+name: KeeBridge
+options:
+  bundleIdPrefix: com.martintooming
+  deploymentTarget:
+    macOS: "15.0"
+  createIntermediateGroups: true
+  developmentLanguage: en
+
+packages:
+  KeeBridgeCore:
+    path: KeeBridgeCore
+
+targets:
+  KeeBridge:
+    type: application
+    platform: macOS
+    sources:
+      - path: KeeBridge
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.martintooming.KeeBridge
+        MARKETING_VERSION: "0.1"
+        CURRENT_PROJECT_VERSION: "1"
+        DEVELOPMENT_TEAM: M2KQ698ZS5
+        CODE_SIGN_STYLE: Automatic
+        ENABLE_APP_SANDBOX: NO
+        SWIFT_VERSION: "6.1"
+        MACOSX_DEPLOYMENT_TARGET: "15.0"
+        GENERATE_INFOPLIST_FILE: YES
+        INFOPLIST_KEY_NSHumanReadableCopyright: ""
+        INFOPLIST_KEY_LSApplicationCategoryType: public.app-category.utilities
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+    entitlements:
+      path: KeeBridge/KeeBridge.entitlements
+      properties:
+        com.apple.developer.authentication-services.autofill-credential-provider: true
+    dependencies:
+      - target: KeeBridgeProvider
+        embed: true
+      - package: KeeBridgeCore
+
+  KeeBridgeProvider:
+    type: app-extension
+    platform: macOS
+    sources:
+      - path: KeeBridgeProvider
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.martintooming.KeeBridge.Provider
+        MARKETING_VERSION: "0.1"
+        CURRENT_PROJECT_VERSION: "1"
+        DEVELOPMENT_TEAM: M2KQ698ZS5
+        CODE_SIGN_STYLE: Automatic
+        ENABLE_APP_SANDBOX: YES
+        SWIFT_VERSION: "6.1"
+        MACOSX_DEPLOYMENT_TARGET: "15.0"
+        GENERATE_INFOPLIST_FILE: YES
+        SKIP_INSTALL: YES
+    entitlements:
+      path: KeeBridgeProvider/KeeBridgeProvider.entitlements
+      properties:
+        com.apple.security.app-sandbox: true
+        com.apple.developer.authentication-services.autofill-credential-provider: true
+    info:
+      path: KeeBridgeProvider/Info.plist
+      properties:
+        CFBundleDisplayName: KeeBridge Provider
+        NSExtension:
+          NSExtensionPointIdentifier: com.apple.authentication-services-credential-provider-ui
+          NSExtensionPrincipalClass: $(PRODUCT_MODULE_NAME).CredentialProviderViewController
+          NSExtensionAttributes:
+            ASCredentialProviderExtensionCapabilities:
+              ProvidesPasswords: true
+              ProvidesOneTimeCodes: true
+    dependencies:
+      - package: KeeBridgeCore
+
+schemes:
+  KeeBridge:
+    build:
+      targets:
+        KeeBridge: all
+    run:
+      config: Debug

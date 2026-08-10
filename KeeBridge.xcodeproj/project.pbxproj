@@ -1,0 +1,524 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 77;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		14E96AEDAFE0422EEFA207D4 /* KeeBridgeProvider.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = CC20DB7562B9C6D57A564E81 /* KeeBridgeProvider.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+		6E9FF00F0B07B3CDFEEB5B93 /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A760E0754682933EAC31DC09 /* ContentView.swift */; };
+		732A8EA0D4ED3519B7155E54 /* KeeBridgeCore in Frameworks */ = {isa = PBXBuildFile; productRef = 507FA01BD99D60737317039A /* KeeBridgeCore */; };
+		8249B7BB2E447A9927E5FEB9 /* KeeBridgeApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8FF420918D9945CDED22F9AD /* KeeBridgeApp.swift */; };
+		8406196EB3F7C6F8B2D52E47 /* KeeBridgeCore in Frameworks */ = {isa = PBXBuildFile; productRef = 1024583D082B53DB5B342A8D /* KeeBridgeCore */; };
+		B0BA29366D0295A7F16D2F35 /* CredentialProviderViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = EF3A57DF0FE81A9FC6D4A370 /* CredentialProviderViewController.swift */; };
+		C0DAF8A2A278A3210D2406E4 /* VaultController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5E10BB89E3E3F3CCCEE3371C /* VaultController.swift */; };
+		D10D14236B9A9CBD864BDD00 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 44BF9F567D246E8D88B37063 /* Assets.xcassets */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXContainerItemProxy section */
+		3296E8049D620CD975D1A009 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 44270B743D4A010F9315EC68 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 5E2A263ECB461219CB267716;
+			remoteInfo = KeeBridgeProvider;
+		};
+/* End PBXContainerItemProxy section */
+
+/* Begin PBXCopyFilesBuildPhase section */
+		617ED12D3A05D3F9944FC16E /* Embed Foundation Extensions */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "";
+			dstSubfolderSpec = 13;
+			files = (
+				14E96AEDAFE0422EEFA207D4 /* KeeBridgeProvider.appex in Embed Foundation Extensions */,
+			);
+			name = "Embed Foundation Extensions";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXCopyFilesBuildPhase section */
+
+/* Begin PBXFileReference section */
+		379D2904D025DA36E944726B /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
+		44BF9F567D246E8D88B37063 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
+		4E0F4B783685CEBA53F647DA /* KeeBridge.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = KeeBridge.entitlements; sourceTree = "<group>"; };
+		4EBF9AE04F836E66986ABA6E /* KeeBridgeProvider.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = KeeBridgeProvider.entitlements; sourceTree = "<group>"; };
+		5E10BB89E3E3F3CCCEE3371C /* VaultController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VaultController.swift; sourceTree = "<group>"; };
+		8FF420918D9945CDED22F9AD /* KeeBridgeApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeeBridgeApp.swift; sourceTree = "<group>"; };
+		9C8AC20229CF86B375513902 /* KeeBridge.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = KeeBridge.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		A760E0754682933EAC31DC09 /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
+		CC20DB7562B9C6D57A564E81 /* KeeBridgeProvider.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = KeeBridgeProvider.appex; sourceTree = BUILT_PRODUCTS_DIR; };
+		EF3A57DF0FE81A9FC6D4A370 /* CredentialProviderViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CredentialProviderViewController.swift; sourceTree = "<group>"; };
+		F42266AA316770336E02707E /* KeeBridgeCore */ = {isa = PBXFileReference; lastKnownFileType = folder; name = KeeBridgeCore; path = KeeBridgeCore; sourceTree = SOURCE_ROOT; };
+/* End PBXFileReference section */
+
+/* Begin PBXFrameworksBuildPhase section */
+		53A116AB280306349A8F3C96 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				732A8EA0D4ED3519B7155E54 /* KeeBridgeCore in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		950CC3650B215997FFD96420 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				8406196EB3F7C6F8B2D52E47 /* KeeBridgeCore in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXFrameworksBuildPhase section */
+
+/* Begin PBXGroup section */
+		0106F72F4D9DB11AE6BC93C6 /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				9C8AC20229CF86B375513902 /* KeeBridge.app */,
+				CC20DB7562B9C6D57A564E81 /* KeeBridgeProvider.appex */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+		893A3D3DED4E0F20DD5A9A59 /* KeeBridge */ = {
+			isa = PBXGroup;
+			children = (
+				44BF9F567D246E8D88B37063 /* Assets.xcassets */,
+				A760E0754682933EAC31DC09 /* ContentView.swift */,
+				4E0F4B783685CEBA53F647DA /* KeeBridge.entitlements */,
+				8FF420918D9945CDED22F9AD /* KeeBridgeApp.swift */,
+				5E10BB89E3E3F3CCCEE3371C /* VaultController.swift */,
+			);
+			path = KeeBridge;
+			sourceTree = "<group>";
+		};
+		B53725667DE0E08B20804E55 = {
+			isa = PBXGroup;
+			children = (
+				893A3D3DED4E0F20DD5A9A59 /* KeeBridge */,
+				FBD89663C64E41D2A3DAB646 /* KeeBridgeProvider */,
+				D56C9589D662FC7461A683DD /* Packages */,
+				0106F72F4D9DB11AE6BC93C6 /* Products */,
+			);
+			sourceTree = "<group>";
+		};
+		D56C9589D662FC7461A683DD /* Packages */ = {
+			isa = PBXGroup;
+			children = (
+				F42266AA316770336E02707E /* KeeBridgeCore */,
+			);
+			name = Packages;
+			sourceTree = "<group>";
+		};
+		FBD89663C64E41D2A3DAB646 /* KeeBridgeProvider */ = {
+			isa = PBXGroup;
+			children = (
+				EF3A57DF0FE81A9FC6D4A370 /* CredentialProviderViewController.swift */,
+				379D2904D025DA36E944726B /* Info.plist */,
+				4EBF9AE04F836E66986ABA6E /* KeeBridgeProvider.entitlements */,
+			);
+			path = KeeBridgeProvider;
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		5E2A263ECB461219CB267716 /* KeeBridgeProvider */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 70AD2F604AF9BB4ADBBD59D8 /* Build configuration list for PBXNativeTarget "KeeBridgeProvider" */;
+			buildPhases = (
+				32CC0DF520A94EEA9012FABD /* Sources */,
+				53A116AB280306349A8F3C96 /* Frameworks */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = KeeBridgeProvider;
+			packageProductDependencies = (
+				507FA01BD99D60737317039A /* KeeBridgeCore */,
+			);
+			productName = KeeBridgeProvider;
+			productReference = CC20DB7562B9C6D57A564E81 /* KeeBridgeProvider.appex */;
+			productType = "com.apple.product-type.app-extension";
+		};
+		A63D8B1F33112AA4EDFADC5F /* KeeBridge */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 0846B49D957A1BF64BEE2577 /* Build configuration list for PBXNativeTarget "KeeBridge" */;
+			buildPhases = (
+				CEB879CAAEA688745BEB5E41 /* Sources */,
+				CCC91BC41E34887AB1D60ED4 /* Resources */,
+				950CC3650B215997FFD96420 /* Frameworks */,
+				617ED12D3A05D3F9944FC16E /* Embed Foundation Extensions */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				6C3E065C928E2C778F9050E4 /* PBXTargetDependency */,
+			);
+			name = KeeBridge;
+			packageProductDependencies = (
+				1024583D082B53DB5B342A8D /* KeeBridgeCore */,
+			);
+			productName = KeeBridge;
+			productReference = 9C8AC20229CF86B375513902 /* KeeBridge.app */;
+			productType = "com.apple.product-type.application";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		44270B743D4A010F9315EC68 /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				BuildIndependentTargetsInParallel = YES;
+				LastUpgradeCheck = 1430;
+				TargetAttributes = {
+					5E2A263ECB461219CB267716 = {
+						DevelopmentTeam = M2KQ698ZS5;
+						ProvisioningStyle = Automatic;
+					};
+					A63D8B1F33112AA4EDFADC5F = {
+						DevelopmentTeam = M2KQ698ZS5;
+						ProvisioningStyle = Automatic;
+					};
+				};
+			};
+			buildConfigurationList = 46BEA229F6EA4D32FC78DF78 /* Build configuration list for PBXProject "KeeBridge" */;
+			compatibilityVersion = "Xcode 14.0";
+			developmentRegion = en;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				Base,
+				en,
+			);
+			mainGroup = B53725667DE0E08B20804E55;
+			minimizedProjectReferenceProxies = 1;
+			packageReferences = (
+				FB86708B18148E8ABDF31FAD /* XCLocalSwiftPackageReference "KeeBridgeCore" */,
+			);
+			preferredProjectObjectVersion = 77;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				A63D8B1F33112AA4EDFADC5F /* KeeBridge */,
+				5E2A263ECB461219CB267716 /* KeeBridgeProvider */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXResourcesBuildPhase section */
+		CCC91BC41E34887AB1D60ED4 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				D10D14236B9A9CBD864BDD00 /* Assets.xcassets in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXResourcesBuildPhase section */
+
+/* Begin PBXSourcesBuildPhase section */
+		32CC0DF520A94EEA9012FABD /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				B0BA29366D0295A7F16D2F35 /* CredentialProviderViewController.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		CEB879CAAEA688745BEB5E41 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				6E9FF00F0B07B3CDFEEB5B93 /* ContentView.swift in Sources */,
+				8249B7BB2E447A9927E5FEB9 /* KeeBridgeApp.swift in Sources */,
+				C0DAF8A2A278A3210D2406E4 /* VaultController.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin PBXTargetDependency section */
+		6C3E065C928E2C778F9050E4 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 5E2A263ECB461219CB267716 /* KeeBridgeProvider */;
+			targetProxy = 3296E8049D620CD975D1A009 /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
+
+/* Begin XCBuildConfiguration section */
+		30B6ABF218A29A1BDE61C8C1 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_ENTITLEMENTS = KeeBridgeProvider/KeeBridgeProvider.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				COMBINE_HIDPI_IMAGES = YES;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = M2KQ698ZS5;
+				ENABLE_APP_SANDBOX = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = KeeBridgeProvider/Info.plist;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+					"@executable_path/../../../../Frameworks",
+				);
+				MACOSX_DEPLOYMENT_TARGET = 15.0;
+				MARKETING_VERSION = 0.1;
+				PRODUCT_BUNDLE_IDENTIFIER = com.martintooming.KeeBridge.Provider;
+				SDKROOT = macosx;
+				SKIP_INSTALL = YES;
+				SWIFT_VERSION = 6.1;
+			};
+			name = Debug;
+		};
+		366680A84C9EF550541D42D3 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_ENTITLEMENTS = KeeBridge/KeeBridge.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				COMBINE_HIDPI_IMAGES = YES;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = M2KQ698ZS5;
+				ENABLE_APP_SANDBOX = NO;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.utilities";
+				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+				);
+				MACOSX_DEPLOYMENT_TARGET = 15.0;
+				MARKETING_VERSION = 0.1;
+				PRODUCT_BUNDLE_IDENTIFIER = com.martintooming.KeeBridge;
+				SDKROOT = macosx;
+				SWIFT_VERSION = 6.1;
+			};
+			name = Release;
+		};
+		3AB162ED80BB47986F3CA78A /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_ENTITLEMENTS = KeeBridgeProvider/KeeBridgeProvider.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				COMBINE_HIDPI_IMAGES = YES;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = M2KQ698ZS5;
+				ENABLE_APP_SANDBOX = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = KeeBridgeProvider/Info.plist;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+					"@executable_path/../../../../Frameworks",
+				);
+				MACOSX_DEPLOYMENT_TARGET = 15.0;
+				MARKETING_VERSION = 0.1;
+				PRODUCT_BUNDLE_IDENTIFIER = com.martintooming.KeeBridge.Provider;
+				SDKROOT = macosx;
+				SKIP_INSTALL = YES;
+				SWIFT_VERSION = 6.1;
+			};
+			name = Release;
+		};
+		4AC3519BC38E046E91D222B9 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
+				CLANG_CXX_LIBRARY = "libc++";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				ENABLE_NS_ASSERTIONS = NO;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu11;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				MACOSX_DEPLOYMENT_TARGET = 15.0;
+				MTL_ENABLE_DEBUG_INFO = NO;
+				MTL_FAST_MATH = YES;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = macosx;
+				SWIFT_COMPILATION_MODE = wholemodule;
+				SWIFT_OPTIMIZATION_LEVEL = "-O";
+				SWIFT_VERSION = 5.0;
+			};
+			name = Release;
+		};
+		CA66E142539034B419BF7F57 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_ENTITLEMENTS = KeeBridge/KeeBridge.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				COMBINE_HIDPI_IMAGES = YES;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = M2KQ698ZS5;
+				ENABLE_APP_SANDBOX = NO;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.utilities";
+				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+				);
+				MACOSX_DEPLOYMENT_TARGET = 15.0;
+				MARKETING_VERSION = 0.1;
+				PRODUCT_BUNDLE_IDENTIFIER = com.martintooming.KeeBridge;
+				SDKROOT = macosx;
+				SWIFT_VERSION = 6.1;
+			};
+			name = Debug;
+		};
+		DD2D29AAF2C7F4CD46D946FA /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
+				CLANG_CXX_LIBRARY = "libc++";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = dwarf;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_TESTABILITY = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu11;
+				GCC_DYNAMIC_NO_PIC = NO;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_OPTIMIZATION_LEVEL = 0;
+				GCC_PREPROCESSOR_DEFINITIONS = (
+					"$(inherited)",
+					"DEBUG=1",
+				);
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				MACOSX_DEPLOYMENT_TARGET = 15.0;
+				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
+				MTL_FAST_MATH = YES;
+				ONLY_ACTIVE_ARCH = YES;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = macosx;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG;
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+				SWIFT_VERSION = 5.0;
+			};
+			name = Debug;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		0846B49D957A1BF64BEE2577 /* Build configuration list for PBXNativeTarget "KeeBridge" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				CA66E142539034B419BF7F57 /* Debug */,
+				366680A84C9EF550541D42D3 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		46BEA229F6EA4D32FC78DF78 /* Build configuration list for PBXProject "KeeBridge" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				DD2D29AAF2C7F4CD46D946FA /* Debug */,
+				4AC3519BC38E046E91D222B9 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		70AD2F604AF9BB4ADBBD59D8 /* Build configuration list for PBXNativeTarget "KeeBridgeProvider" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				30B6ABF218A29A1BDE61C8C1 /* Debug */,
+				3AB162ED80BB47986F3CA78A /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+/* End XCConfigurationList section */
+
+/* Begin XCLocalSwiftPackageReference section */
+		FB86708B18148E8ABDF31FAD /* XCLocalSwiftPackageReference "KeeBridgeCore" */ = {
+			isa = XCLocalSwiftPackageReference;
+			relativePath = KeeBridgeCore;
+		};
+/* End XCLocalSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		1024583D082B53DB5B342A8D /* KeeBridgeCore */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = KeeBridgeCore;
+		};
+		507FA01BD99D60737317039A /* KeeBridgeCore */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = KeeBridgeCore;
+		};
+/* End XCSwiftPackageProductDependency section */
+	};
+	rootObject = 44270B743D4A010F9315EC68 /* Project object */;
+}
