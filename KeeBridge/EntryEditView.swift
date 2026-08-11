@@ -61,14 +61,15 @@ struct EntryEditView: View {
     }
 
     private func loadIfEditing() {
-        guard case .edit(let uuid) = mode,
-              let draft = controller.revealEntryForEditing(uuid: uuid)
-        else { return }
-        title = draft.title
-        username = draft.username
-        password = draft.password
-        url = draft.url
-        notes = draft.notes
+        guard case .edit(let uuid) = mode else { return }
+        controller.revealEntryForEditing(uuid: uuid) { draft in
+            guard let draft else { return }
+            title = draft.title
+            username = draft.username
+            password = draft.password
+            url = draft.url
+            notes = draft.notes
+        }
     }
 
     private func save() {

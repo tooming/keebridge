@@ -319,16 +319,25 @@ final class VaultController: ObservableObject {
     }
 
     /// Reveals a single entry's editable fields for populating the edit
-    /// form. Not run on a background task by the caller — SwiftUI forms
-    /// need the value before they can render, so this is a small, deliberate
-    /// exception to the "never block main on Argon2id" rule elsewhere in
-    /// this file. Acceptable here: it's a single-entry reveal (already fast
-    /// relative to a full listEntries), gated behind the user explicitly
-    /// choosing to edit one specific entry, not something that fires
-    /// automatically.
-    func revealEntryForEditing(uuid: String) -> VaultService.EntryDraft? {
-        guard let vaultURL, let preHash = cachedPreHash else { return nil }
-        return try? vaultService.revealEntry(uuid: uuid, at: vaultURL, rawKeyData: preHash)
+    /// form / detail view. Runs the Argon2id KDF on a background task, same
+    /// as everything else in this file — an earlier version ran this
+    /// synchronously on the caller (reasoning: "it's just one entry, fast
+    /// enough"), which was wrong in practice: it's the *same* Argon2id cost
+    /// as every other call here, and since this one fires on every single
+    /// list-row click, it was blocking the main thread on every click —
+    /// reported as "the app is quite slow," which is exactly what a
+    /// several-hundred-ms main-thread block per click looks like.
+    func revealEntryForEditing(uuid: String, completion: @escaping @Sendable (VaultService.EntryDraft?) -> Void) {
+        guard let vaultURL, let preHash = cachedPreHash else {
+            completion(nil)
+            return
+        }
+        Task.detached(priority: .userInitiated) { [vaultService] in
+            let draft = try? vaultService.revealEntry(uuid: uuid, at: vaultURL, rawKeyData: preHash)
+            await MainActor.run {
+                completion(draft)
+            }
+        }
     }
 
     // MARK: - Mirroring into the extension's sandbox container

@@ -114,9 +114,11 @@ struct EntryDetailView: View {
     private func reveal() {
         revealedPassword = nil
         showPasswordPlaintext = false
-        guard let draft = controller.revealEntryForEditing(uuid: entry.uuid) else { return }
-        revealedPassword = draft.password
-        revealedNotes = draft.notes
+        controller.revealEntryForEditing(uuid: entry.uuid) { draft in
+            guard let draft else { return }
+            revealedPassword = draft.password
+            revealedNotes = draft.notes
+        }
     }
 
     private func copyToPasteboard(_ string: String) {
