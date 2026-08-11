@@ -7,7 +7,10 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		11E417364902A622B95D2712 /* VaultBrowserView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4B06C621F76BB08C1309A0EE /* VaultBrowserView.swift */; };
 		14E96AEDAFE0422EEFA207D4 /* KeeBridgeProvider.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = CC20DB7562B9C6D57A564E81 /* KeeBridgeProvider.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+		31324ECC28B100944E161695 /* EntryEditView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 75A8A7EC196ED66BCA61863F /* EntryEditView.swift */; };
+		40BA7B37FFEBB34F6AE25CA9 /* LockedView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F416411A6F003CBCEEC14003 /* LockedView.swift */; };
 		6E9FF00F0B07B3CDFEEB5B93 /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A760E0754682933EAC31DC09 /* ContentView.swift */; };
 		732A8EA0D4ED3519B7155E54 /* KeeBridgeCore in Frameworks */ = {isa = PBXBuildFile; productRef = 507FA01BD99D60737317039A /* KeeBridgeCore */; };
 		8249B7BB2E447A9927E5FEB9 /* KeeBridgeApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8FF420918D9945CDED22F9AD /* KeeBridgeApp.swift */; };
@@ -15,6 +18,7 @@
 		B0BA29366D0295A7F16D2F35 /* CredentialProviderViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = EF3A57DF0FE81A9FC6D4A370 /* CredentialProviderViewController.swift */; };
 		C0DAF8A2A278A3210D2406E4 /* VaultController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5E10BB89E3E3F3CCCEE3371C /* VaultController.swift */; };
 		D10D14236B9A9CBD864BDD00 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 44BF9F567D246E8D88B37063 /* Assets.xcassets */; };
+		E8EC4995630F81E5602C032F /* EntryDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A7AEE8AD8AF9BA75F0987CE0 /* EntryDetailView.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -44,14 +48,18 @@
 /* Begin PBXFileReference section */
 		379D2904D025DA36E944726B /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
 		44BF9F567D246E8D88B37063 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
+		4B06C621F76BB08C1309A0EE /* VaultBrowserView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VaultBrowserView.swift; sourceTree = "<group>"; };
 		4E0F4B783685CEBA53F647DA /* KeeBridge.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = KeeBridge.entitlements; sourceTree = "<group>"; };
 		4EBF9AE04F836E66986ABA6E /* KeeBridgeProvider.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = KeeBridgeProvider.entitlements; sourceTree = "<group>"; };
 		5E10BB89E3E3F3CCCEE3371C /* VaultController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VaultController.swift; sourceTree = "<group>"; };
+		75A8A7EC196ED66BCA61863F /* EntryEditView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EntryEditView.swift; sourceTree = "<group>"; };
 		8FF420918D9945CDED22F9AD /* KeeBridgeApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeeBridgeApp.swift; sourceTree = "<group>"; };
 		9C8AC20229CF86B375513902 /* KeeBridge.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = KeeBridge.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		A760E0754682933EAC31DC09 /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
+		A7AEE8AD8AF9BA75F0987CE0 /* EntryDetailView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EntryDetailView.swift; sourceTree = "<group>"; };
 		CC20DB7562B9C6D57A564E81 /* KeeBridgeProvider.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = KeeBridgeProvider.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 		EF3A57DF0FE81A9FC6D4A370 /* CredentialProviderViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CredentialProviderViewController.swift; sourceTree = "<group>"; };
+		F416411A6F003CBCEEC14003 /* LockedView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LockedView.swift; sourceTree = "<group>"; };
 		F42266AA316770336E02707E /* KeeBridgeCore */ = {isa = PBXFileReference; lastKnownFileType = folder; name = KeeBridgeCore; path = KeeBridgeCore; sourceTree = SOURCE_ROOT; };
 /* End PBXFileReference section */
 
@@ -89,8 +97,12 @@
 			children = (
 				44BF9F567D246E8D88B37063 /* Assets.xcassets */,
 				A760E0754682933EAC31DC09 /* ContentView.swift */,
+				A7AEE8AD8AF9BA75F0987CE0 /* EntryDetailView.swift */,
+				75A8A7EC196ED66BCA61863F /* EntryEditView.swift */,
 				4E0F4B783685CEBA53F647DA /* KeeBridge.entitlements */,
 				8FF420918D9945CDED22F9AD /* KeeBridgeApp.swift */,
+				F416411A6F003CBCEEC14003 /* LockedView.swift */,
+				4B06C621F76BB08C1309A0EE /* VaultBrowserView.swift */,
 				5E10BB89E3E3F3CCCEE3371C /* VaultController.swift */,
 			);
 			path = KeeBridge;
@@ -235,7 +247,11 @@
 			buildActionMask = 2147483647;
 			files = (
 				6E9FF00F0B07B3CDFEEB5B93 /* ContentView.swift in Sources */,
+				E8EC4995630F81E5602C032F /* EntryDetailView.swift in Sources */,
+				31324ECC28B100944E161695 /* EntryEditView.swift in Sources */,
 				8249B7BB2E447A9927E5FEB9 /* KeeBridgeApp.swift in Sources */,
+				40BA7B37FFEBB34F6AE25CA9 /* LockedView.swift in Sources */,
+				11E417364902A622B95D2712 /* VaultBrowserView.swift in Sources */,
 				C0DAF8A2A278A3210D2406E4 /* VaultController.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;

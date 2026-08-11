@@ -182,7 +182,183 @@ public struct VaultService: Sendable {
         return TOTPGenerator.currentCode(for: params)
     }
 
-    // MARK: - Shared decrypt
+    // MARK: - Writing (v2 — createVault/createEntry/updateEntry/deleteEntry)
+
+    /// Fields for creating or editing a login-style entry. Deliberately the
+    /// same five fields `listEntries`/`revealField` already deal with —
+    /// card/note entry types stay KeePassXC-only for now (see the
+    /// secrets-management-UI plan's "first pass" scope).
+    public struct EntryDraft: Sendable {
+        public var title: String
+        public var username: String
+        public var password: String
+        public var url: String
+        public var notes: String
+
+        public init(title: String = "", username: String = "", password: String = "", url: String = "", notes: String = "") {
+            self.title = title
+            self.username = username
+            self.password = password
+            self.url = url
+            self.notes = notes
+        }
+    }
+
+    public enum VaultWriteError: Error, CustomStringConvertible {
+        case entryNotFound(String)
+        case writeFailed(String)
+
+        public var description: String {
+            switch self {
+            case .entryNotFound(let uuid): return "No entry with UUID \(uuid) found in the vault"
+            case .writeFailed(let reason): return "Failed to write vault: \(reason)"
+            }
+        }
+    }
+
+    /// Creates a brand-new, empty vault at `url` (KDBX 4.1, Argon2id
+    /// defaults, via KDBXKit's own `KDBXContent.makeEmpty`), encrypted
+    /// under `masterPassword`. Fails if a file already exists at `url` —
+    /// this is "start a fresh vault", not "overwrite an existing one".
+    public func createVault(at url: URL, masterPassword: String, databaseName: String) throws {
+        guard !FileManager.default.fileExists(atPath: url.path) else {
+            throw VaultWriteError.writeFailed("A file already exists at \(url.path)")
+        }
+        let content = KDBXContent.makeEmpty(databaseName: databaseName)
+        try write(content, unlock: UnlockData(masterPassword: masterPassword), to: url)
+    }
+
+    /// Adds a new entry to the vault's root group. Returns the new entry's
+    /// UUID (as a string, matching `VaultLoginEntry.uuid`'s format).
+    public func createEntry(_ draft: EntryDraft, at url: URL, rawKeyData: Data) throws -> String {
+        try createEntry(draft, at: url, unlock: UnlockData(rawKeyData: rawKeyData))
+    }
+
+    public func createEntry(_ draft: EntryDraft, at url: URL, masterPassword: String) throws -> String {
+        try createEntry(draft, at: url, unlock: UnlockData(masterPassword: masterPassword))
+    }
+
+    private func createEntry(_ draft: EntryDraft, at url: URL, unlock: UnlockData) throws -> String {
+        var content = try openContent(at: url, unlock: unlock)
+        let newUUID = UUID()
+        let now = Date()
+        let entry = KDBX.Entry(
+            uuid: newUUID,
+            times: KDBX.Times(creationTime: now, lastModificationTime: now),
+            strings: draftStrings(draft)
+        )
+        content.database.root.group.entries.append(entry)
+        try write(content, unlock: unlock, to: url)
+        return "\(newUUID)"
+    }
+
+    /// Overwrites an existing entry's fields in place. Throws
+    /// `.entryNotFound` if no entry with that UUID exists anywhere in the
+    /// tree (searched recursively, same as `listEntries`/`revealField`).
+    public func updateEntry(uuid: String, applying draft: EntryDraft, at url: URL, rawKeyData: Data) throws {
+        try updateEntry(uuid: uuid, applying: draft, at: url, unlock: UnlockData(rawKeyData: rawKeyData))
+    }
+
+    private func updateEntry(uuid: String, applying draft: EntryDraft, at url: URL, unlock: UnlockData) throws {
+        var content = try openContent(at: url, unlock: unlock)
+        let found = Self.mutateEntry(in: &content.database.root.group, uuid: uuid) { entry in
+            entry.strings = self.draftStrings(draft)
+            var times = entry.times ?? KDBX.Times()
+            times.lastModificationTime = Date()
+            entry.times = times
+        }
+        guard found else { throw VaultWriteError.entryNotFound(uuid) }
+        try write(content, unlock: unlock, to: url)
+    }
+
+    /// Removes an entry entirely (not a move to a recycle bin — v1 doesn't
+    /// model one). Throws `.entryNotFound` if the UUID doesn't exist.
+    public func deleteEntry(uuid: String, at url: URL, rawKeyData: Data) throws {
+        try deleteEntry(uuid: uuid, at: url, unlock: UnlockData(rawKeyData: rawKeyData))
+    }
+
+    private func deleteEntry(uuid: String, at url: URL, unlock: UnlockData) throws {
+        var content = try openContent(at: url, unlock: unlock)
+        let found = Self.removeEntry(in: &content.database.root.group, uuid: uuid)
+        guard found else { throw VaultWriteError.entryNotFound(uuid) }
+        try write(content, unlock: unlock, to: url)
+    }
+
+    /// Reveals an existing entry's editable fields, for populating an edit
+    /// form. Like `revealField`, this is a credential-selection-time-only
+    /// operation — never called for bulk listing.
+    public func revealEntry(uuid: String, at url: URL, rawKeyData: Data) throws -> EntryDraft {
+        try revealEntry(uuid: uuid, at: url, unlock: UnlockData(rawKeyData: rawKeyData))
+    }
+
+    private func revealEntry(uuid: String, at url: URL, unlock: UnlockData) throws -> EntryDraft {
+        let content = try openContent(at: url, unlock: unlock)
+        guard let entry = Self.findEntry(in: content.database.root.group, uuid: uuid) else {
+            throw VaultWriteError.entryNotFound(uuid)
+        }
+        func value(_ key: String) -> String {
+            entry.strings.first(where: { $0.key == key })?.value.revealedString ?? ""
+        }
+        return EntryDraft(
+            title: value("Title"), username: value("UserName"), password: value("Password"),
+            url: value("URL"), notes: value("Notes")
+        )
+    }
+
+    // MARK: - Write-side tree helpers
+
+    /// Builds the standard five-field `strings` array for an entry.
+    /// Password is `.unprotected` (despite the name — see
+    /// `KDBX.ProtectedString.Value`'s doc comment: this is the case that
+    /// gets written with `Protected="True"`, i.e. inner-cipher encrypted
+    /// on disk, matching KeePass's `MemoryProtectionConfig.protectPassword`
+    /// default). The rest are `.regular` (plaintext in the XML), matching
+    /// standard KeePass/KeePassXC behavior for non-secret fields.
+    private func draftStrings(_ draft: EntryDraft) -> [KDBX.ProtectedString] {
+        [
+            KDBX.ProtectedString(key: "Title", value: .regular(draft.title)),
+            KDBX.ProtectedString(key: "UserName", value: .regular(draft.username)),
+            KDBX.ProtectedString(key: "Password", value: .unprotected(draft.password)),
+            KDBX.ProtectedString(key: "URL", value: .regular(draft.url)),
+            KDBX.ProtectedString(key: "Notes", value: .regular(draft.notes)),
+        ]
+    }
+
+    private static func findEntry(in group: KDBX.Group, uuid: String) -> KDBX.Entry? {
+        for entry in group.entries where "\(entry.uuid)" == uuid { return entry }
+        for child in group.groups {
+            if let found = findEntry(in: child, uuid: uuid) { return found }
+        }
+        return nil
+    }
+
+    /// Finds the entry with `uuid` anywhere in the tree and applies `mutate`
+    /// to it in place. Returns whether an entry was found.
+    private static func mutateEntry(in group: inout KDBX.Group, uuid: String, mutate: (inout KDBX.Entry) -> Void) -> Bool {
+        for i in group.entries.indices where "\(group.entries[i].uuid)" == uuid {
+            mutate(&group.entries[i])
+            return true
+        }
+        for i in group.groups.indices {
+            if mutateEntry(in: &group.groups[i], uuid: uuid, mutate: mutate) { return true }
+        }
+        return false
+    }
+
+    /// Finds and removes the entry with `uuid` anywhere in the tree.
+    /// Returns whether an entry was found (and removed).
+    private static func removeEntry(in group: inout KDBX.Group, uuid: String) -> Bool {
+        if let index = group.entries.firstIndex(where: { "\($0.uuid)" == uuid }) {
+            group.entries.remove(at: index)
+            return true
+        }
+        for i in group.groups.indices {
+            if removeEntry(in: &group.groups[i], uuid: uuid) { return true }
+        }
+        return false
+    }
+
+    // MARK: - Shared decrypt/encrypt
 
     private func openContent(at url: URL, unlock: UnlockData) throws -> KDBXContent {
         guard FileManager.default.fileExists(atPath: url.path) else {
@@ -198,6 +374,27 @@ public struct VaultService: Sendable {
             return try KDBXReader.parse(data, unlockData: unlock)
         } catch {
             throw VaultServiceError.openFailed("\(error)")
+        }
+    }
+
+    /// Serializes `content` and writes it atomically to `url`, keeping a
+    /// `.bak` sibling of whatever was there before. Pattern taken directly
+    /// from KDBXKit's own CLI (`Sources/KDBXCLICore/VaultWriting.swift`).
+    private func write(_ content: KDBXContent, unlock: UnlockData, to url: URL) throws {
+        let stream = OutputStream(toMemory: ())
+        stream.open()
+        do {
+            try KDBXWriter(to: stream).write(content, unlockData: unlock)
+        } catch {
+            throw VaultWriteError.writeFailed("\(error)")
+        }
+        guard let data = stream.property(forKey: .dataWrittenToMemoryStreamKey) as? Data else {
+            throw VaultWriteError.writeFailed("memory stream returned no data after KDBXWriter finished")
+        }
+        do {
+            try AtomicFileWriter.write(data, to: url, backup: true)
+        } catch {
+            throw VaultWriteError.writeFailed("\(error)")
         }
     }
 }

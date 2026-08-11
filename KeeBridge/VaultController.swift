@@ -30,6 +30,11 @@ final class VaultController: ObservableObject {
     @Published var identityCount = 0
     @Published var lastError: String?
     @Published var hasVaultSelected = false
+    // Kept around after unlock/refresh (previously discarded once identities
+    // were registered) — the secrets-management browser UI needs this list.
+    // Non-secret metadata only, same as before (title/username/url/custom
+    // field names) — field *values* are still only ever revealed on demand.
+    @Published var entries: [VaultLoginEntry] = []
 
     // Immutable + Sendable, so nonisolated: lets the heavy Argon2id/Keychain
     // work in unlock()/refreshFromCache() run off the main actor without an
@@ -116,6 +121,7 @@ final class VaultController: ObservableObject {
                     self.isUnlocked = true
                     self.lastError = nil
                     self.cachedPreHash = preHash
+                    self.entries = entries
                     self.populateIdentityStore(entries: entries)
                     self.startWatching()
                 }
@@ -174,6 +180,7 @@ final class VaultController: ObservableObject {
                     guard let self else { return }
                     self.isWorking = false
                     self.isUnlocked = true
+                    self.entries = entries
                     self.populateIdentityStore(entries: entries)
                 }
             } catch {
@@ -183,6 +190,145 @@ final class VaultController: ObservableObject {
                 }
             }
         }
+    }
+
+    // MARK: - Writing (v2: create/edit/delete entries, create a new vault)
+
+    // Same shape as unlock()/refreshFromCache(): thin @MainActor wrapper,
+    // real work (Argon2id + file write) on a detached task, re-list +
+    // re-mirror + re-register identities on success so the browser UI, the
+    // extension, and Safari's suggestions all reflect the change immediately.
+
+    /// Clears in-memory unlock state (not the Keychain item — "Refresh from
+    /// cached key" / Touch ID still works after this). Doesn't touch the
+    /// vault file or the extension's mirror; purely a UI-state reset so the
+    /// browser closes and the locked screen shows again.
+    func lock() {
+        isUnlocked = false
+        entries = []
+        cachedPreHash = nil
+    }
+
+    func createNewVault(databaseName: String, masterPassword: String) {
+        guard !isWorking else { return }
+        let panel = NSSavePanel()
+        panel.nameFieldStringValue = databaseName.isEmpty ? "Vault.kdbx" : "\(databaseName).kdbx"
+        panel.message = "Choose where to save the new vault"
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+
+        isWorking = true
+        statusMessage = "Creating vault…"
+        Task.detached(priority: .userInitiated) { [vaultService] in
+            do {
+                try vaultService.createVault(at: url, masterPassword: masterPassword, databaseName: databaseName)
+                await MainActor.run { [weak self] in
+                    guard let self else { return }
+                    self.isWorking = false
+                    self.defaults.set(url.path, forKey: self.vaultPathDefaultsKey)
+                    self.vaultURL = url
+                    self.hasVaultSelected = true
+                    self.lastError = nil
+                    self.statusMessage = "Vault created: \(url.lastPathComponent). Enter your new master password to unlock."
+                }
+            } catch {
+                await MainActor.run { [weak self] in
+                    self?.isWorking = false
+                    self?.lastError = "Could not create vault: \(error)"
+                }
+            }
+        }
+    }
+
+    // Each of these three follows the exact shape unlock()/refresh() use:
+    // Task.detached captures only Sendable values ([vaultService]), never
+    // `self` directly — every touch of `self` happens inside its own
+    // `MainActor.run { [weak self] in ... }`. Deliberately NOT factored into
+    // a shared `self`-bound helper: an earlier version of this file did that
+    // and it silently forced a strong `self` capture on the outer detached
+    // closure (referencing `self.someMethod(...)` directly in a closure body
+    // captures `self`, even when only reached via a nested `await`) —
+    // repetitive but correct beats DRY but capturing-self-by-accident here.
+
+    func createEntry(_ draft: VaultService.EntryDraft) {
+        guard let vaultURL, let preHash = cachedPreHash, !isWorking else { return }
+        isWorking = true
+        Task.detached(priority: .userInitiated) { [vaultService] in
+            do {
+                _ = try vaultService.createEntry(draft, at: vaultURL, rawKeyData: preHash)
+                let entries = try vaultService.listEntries(at: vaultURL, rawKeyData: preHash)
+                try Self.mirrorVaultToExtension(from: vaultURL)
+                await MainActor.run { [weak self] in
+                    guard let self else { return }
+                    self.isWorking = false
+                    self.entries = entries
+                    self.populateIdentityStore(entries: entries)
+                }
+            } catch {
+                await MainActor.run { [weak self] in
+                    self?.isWorking = false
+                    self?.lastError = "Could not add entry: \(error)"
+                }
+            }
+        }
+    }
+
+    func updateEntry(uuid: String, applying draft: VaultService.EntryDraft) {
+        guard let vaultURL, let preHash = cachedPreHash, !isWorking else { return }
+        isWorking = true
+        Task.detached(priority: .userInitiated) { [vaultService] in
+            do {
+                try vaultService.updateEntry(uuid: uuid, applying: draft, at: vaultURL, rawKeyData: preHash)
+                let entries = try vaultService.listEntries(at: vaultURL, rawKeyData: preHash)
+                try Self.mirrorVaultToExtension(from: vaultURL)
+                await MainActor.run { [weak self] in
+                    guard let self else { return }
+                    self.isWorking = false
+                    self.entries = entries
+                    self.populateIdentityStore(entries: entries)
+                }
+            } catch {
+                await MainActor.run { [weak self] in
+                    self?.isWorking = false
+                    self?.lastError = "Could not save changes: \(error)"
+                }
+            }
+        }
+    }
+
+    func deleteEntry(uuid: String) {
+        guard let vaultURL, let preHash = cachedPreHash, !isWorking else { return }
+        isWorking = true
+        Task.detached(priority: .userInitiated) { [vaultService] in
+            do {
+                try vaultService.deleteEntry(uuid: uuid, at: vaultURL, rawKeyData: preHash)
+                let entries = try vaultService.listEntries(at: vaultURL, rawKeyData: preHash)
+                try Self.mirrorVaultToExtension(from: vaultURL)
+                await MainActor.run { [weak self] in
+                    guard let self else { return }
+                    self.isWorking = false
+                    self.entries = entries
+                    self.populateIdentityStore(entries: entries)
+                }
+            } catch {
+                await MainActor.run { [weak self] in
+                    self?.isWorking = false
+                    self?.lastError = "Could not delete entry: \(error)"
+                }
+            }
+        }
+    }
+
+    /// Reveals a single entry's editable fields for populating the edit
+    /// form. Not run on a background task by the caller — SwiftUI forms
+    /// need the value before they can render, so this is a small, deliberate
+    /// exception to the "never block main on Argon2id" rule elsewhere in
+    /// this file. Acceptable here: it's a single-entry reveal (already fast
+    /// relative to a full listEntries), gated behind the user explicitly
+    /// choosing to edit one specific entry, not something that fires
+    /// automatically.
+    func revealEntryForEditing(uuid: String) -> VaultService.EntryDraft? {
+        guard let vaultURL, let preHash = cachedPreHash else { return nil }
+        return try? vaultService.revealEntry(uuid: uuid, at: vaultURL, rawKeyData: preHash)
     }
 
     // MARK: - Mirroring into the extension's sandbox container
