@@ -24,6 +24,14 @@ struct EntryEditView: View {
     @State private var password = ""
     @State private var url = ""
     @State private var notes = ""
+    // True while waiting on revealEntryForEditing's background Argon2id
+    // pass (edit mode only — add mode has nothing to reveal, starts blank
+    // immediately). Without this the form just showed empty fields with no
+    // indication anything was happening, which read as "lag"/broken rather
+    // than "loading" — the Detail view already had this via its `if let
+    // revealedPassword { ... } else { ProgressView() }`, this brings the
+    // edit form in line with it.
+    @State private var isLoading = false
 
     private var isAdd: Bool {
         if case .add = mode { return true }
@@ -34,15 +42,24 @@ struct EntryEditView: View {
         VStack(alignment: .leading, spacing: 12) {
             Text(isAdd ? "Add Entry" : "Edit Entry").font(.headline)
 
-            Form {
-                TextField("Title", text: $title)
-                TextField("Username", text: $username)
-                SecureField("Password", text: $password)
-                TextField("URL", text: $url)
-                TextField("Notes", text: $notes, axis: .vertical)
-                    .lineLimit(3...6)
+            if isLoading {
+                VStack {
+                    Spacer()
+                    ProgressView("Decrypting…")
+                    Spacer()
+                }
+                .frame(height: 220)
+            } else {
+                Form {
+                    TextField("Title", text: $title)
+                    TextField("Username", text: $username)
+                    SecureField("Password", text: $password)
+                    TextField("URL", text: $url)
+                    TextField("Notes", text: $notes, axis: .vertical)
+                        .lineLimit(3...6)
+                }
+                .formStyle(.grouped)
             }
-            .formStyle(.grouped)
 
             HStack {
                 Spacer()
@@ -52,7 +69,7 @@ struct EntryEditView: View {
                     dismiss()
                 }
                 .keyboardShortcut(.defaultAction)
-                .disabled(title.isEmpty)
+                .disabled(title.isEmpty || isLoading)
             }
         }
         .padding(20)
@@ -62,7 +79,9 @@ struct EntryEditView: View {
 
     private func loadIfEditing() {
         guard case .edit(let uuid) = mode else { return }
+        isLoading = true
         controller.revealEntryForEditing(uuid: uuid) { draft in
+            isLoading = false
             guard let draft else { return }
             title = draft.title
             username = draft.username
