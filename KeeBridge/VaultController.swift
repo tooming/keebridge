@@ -122,6 +122,7 @@ final class VaultController: ObservableObject {
                     self.lastError = nil
                     self.cachedPreHash = preHash
                     self.entries = entries
+                    self.lastRefreshDate = Date()
                     self.populateIdentityStore(entries: entries)
                     self.startWatching()
                 }
@@ -181,6 +182,7 @@ final class VaultController: ObservableObject {
                     self.isWorking = false
                     self.isUnlocked = true
                     self.entries = entries
+                    self.lastRefreshDate = Date()
                     self.populateIdentityStore(entries: entries)
                 }
             } catch {
@@ -261,6 +263,7 @@ final class VaultController: ObservableObject {
                     guard let self else { return }
                     self.isWorking = false
                     self.entries = entries
+                    self.lastRefreshDate = Date()
                     self.populateIdentityStore(entries: entries)
                 }
             } catch {
@@ -284,6 +287,7 @@ final class VaultController: ObservableObject {
                     guard let self else { return }
                     self.isWorking = false
                     self.entries = entries
+                    self.lastRefreshDate = Date()
                     self.populateIdentityStore(entries: entries)
                 }
             } catch {
@@ -307,6 +311,7 @@ final class VaultController: ObservableObject {
                     guard let self else { return }
                     self.isWorking = false
                     self.entries = entries
+                    self.lastRefreshDate = Date()
                     self.populateIdentityStore(entries: entries)
                 }
             } catch {
@@ -447,7 +452,30 @@ final class VaultController: ObservableObject {
             object: nil,
             queue: .main
         ) { [weak self] _ in
-            Task { @MainActor in self?.refreshFromCache() }
+            Task { @MainActor in self?.refreshIfStale() }
         }
+    }
+
+    private var lastRefreshDate: Date?
+    // didBecomeActiveNotification turned out to fire on internal focus
+    // changes too — not just switching back from another app, but opening/
+    // interacting with KeeBridge's own sheets (confirmed via the log:
+    // identity-store repopulation firing every few seconds while just
+    // sitting in the Edit sheet). Every firing republished `entries`
+    // (@Published), forcing the actively-open, actively-being-typed-in
+    // form to re-render repeatedly — reported as "the edit window has
+    // noticeable lag." Throttling to once per 15s keeps the actual intent
+    // (pick up edits made in KeePassXC while you were away) without the
+    // refresh firing on every internal UI interaction. The manual "Refresh
+    // from cached key" button calls refreshFromCache() directly and stays
+    // unthrottled — that's explicit user intent, always honor it.
+    private static let refreshThrottleInterval: TimeInterval = 15
+
+    private func refreshIfStale() {
+        if let lastRefreshDate, Date().timeIntervalSince(lastRefreshDate) < Self.refreshThrottleInterval {
+            return
+        }
+        lastRefreshDate = Date()
+        refreshFromCache()
     }
 }
