@@ -111,14 +111,19 @@ struct EntryDetailView: View {
         }
     }
 
+    // Synchronous now (v3: pure in-memory against the session-cached
+    // content, no Argon2). The `revealedPassword == nil` → ProgressView
+    // branch above stays as a harmless defensive fallback (e.g. if
+    // cachedContent is somehow nil), not because this is actually async
+    // anymore.
     private func reveal() {
-        revealedPassword = nil
         showPasswordPlaintext = false
-        controller.revealEntryForEditing(uuid: entry.uuid) { draft in
-            guard let draft else { return }
-            revealedPassword = draft.password
-            revealedNotes = draft.notes
+        guard let draft = controller.revealEntryForEditing(uuid: entry.uuid) else {
+            revealedPassword = nil
+            return
         }
+        revealedPassword = draft.password
+        revealedNotes = draft.notes
     }
 
     private func copyToPasteboard(_ string: String) {

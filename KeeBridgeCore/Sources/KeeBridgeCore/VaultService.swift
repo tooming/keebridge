@@ -56,36 +56,40 @@ public struct VaultService: Sendable {
     ///
     /// IMPORTANT: this is the *pre-KDF* hash, not the final unlock key.
     /// Caching it skips re-prompting for the password — it does NOT skip
-    /// the Argon2id KDF pass; that still runs on every `listEntries`/
-    /// `revealField` call, from either the password or the cached
-    /// pre-hash, exactly as KeePassXC itself re-runs Argon2id on every
-    /// unlock. That's by KDBX spec design, not an oversight here.
+    /// the Argon2id KDF pass. Callers that need to avoid re-paying that
+    /// cost on every read should call `openVault` once and reuse the
+    /// returned `KDBXContent` with the `in content:` methods below, rather
+    /// than calling the `at url:` convenience methods repeatedly (each of
+    /// those opens fresh, KDF included, every time — correct for a single
+    /// one-off read, wasteful for repeated reads in the same session).
     public func preHashKeyData(forPassword password: String) -> Data {
         UnlockData(masterPassword: password).keyDataBytes.toData()
     }
 
-    // MARK: - Opening
+    // MARK: - Opening (the only methods that touch disk + pay the KDF cost)
 
-    /// Opens the vault and returns lightweight metadata for every login-type
-    /// entry (title, username, URL, and the *names* of any custom fields).
-    /// Never returns a field *value* other than title/username/URL, and
-    /// never touches disk with anything other than the original encrypted
-    /// file.
-    public func listEntries(at url: URL, masterPassword: String) throws -> [VaultLoginEntry] {
-        try listEntries(at: url, unlock: UnlockData(masterPassword: masterPassword))
+    /// Decrypts and parses the vault, returning the full `KDBXContent` for
+    /// the caller to hold onto and reuse with the `in content:` methods
+    /// below — this is the expensive call (disk I/O + Argon2id); everything
+    /// else that operates on an already-open `KDBXContent` is cheap,
+    /// in-memory, and safe to call as often as needed (e.g. on every list
+    /// selection) without re-paying that cost.
+    public func openVault(at url: URL, masterPassword: String) throws -> KDBXContent {
+        try openContent(at: url, unlock: UnlockData(masterPassword: masterPassword))
     }
 
-    /// Same as `listEntries(at:masterPassword:)`, but unlocking from a
+    /// Same as `openVault(at:masterPassword:)`, unlocking from a
     /// previously-cached pre-hash (see `preHashKeyData`) instead of a
-    /// plaintext password — the path the container app and extension use
-    /// after first unlock.
-    public func listEntries(at url: URL, rawKeyData: Data) throws -> [VaultLoginEntry] {
-        try listEntries(at: url, unlock: UnlockData(rawKeyData: rawKeyData))
+    /// plaintext password.
+    public func openVault(at url: URL, rawKeyData: Data) throws -> KDBXContent {
+        try openContent(at: url, unlock: UnlockData(rawKeyData: rawKeyData))
     }
 
-    private func listEntries(at url: URL, unlock: UnlockData) throws -> [VaultLoginEntry] {
-        let content = try openContent(at: url, unlock: unlock)
-
+    /// Lightweight metadata for every login-type entry in an already-open
+    /// vault (title, username, URL, and the *names* of any custom fields).
+    /// Never returns a field *value* other than title/username/URL. Pure
+    /// in-memory walk — no I/O, no KDF, safe to call repeatedly.
+    public func listEntries(in content: KDBXContent) -> [VaultLoginEntry] {
         var results: [VaultLoginEntry] = []
 
         func standardValue(_ entry: KDBX.Entry, _ key: String) -> String {
@@ -118,25 +122,26 @@ public struct VaultService: Sendable {
         return results
     }
 
+    /// Opens the vault fresh from disk and lists its entries in one call —
+    /// convenience for one-off reads (VaultProbe, tests). Pays the full
+    /// I/O + KDF cost every time; prefer `openVault` once + `listEntries(in:)`
+    /// repeatedly for anything that reads more than once in a session.
+    public func listEntries(at url: URL, masterPassword: String) throws -> [VaultLoginEntry] {
+        listEntries(in: try openVault(at: url, masterPassword: masterPassword))
+    }
+
+    /// Same as `listEntries(at:masterPassword:)`, unlocking from a cached
+    /// pre-hash instead.
+    public func listEntries(at url: URL, rawKeyData: Data) throws -> [VaultLoginEntry] {
+        listEntries(in: try openVault(at: url, rawKeyData: rawKeyData))
+    }
+
     // MARK: - Field reveal (credential-selection time only)
 
     /// Decrypts and returns a single field's *value* for one entry, by UUID
-    /// and field key, unlocking with a plaintext master password. Used at
-    /// credential-selection time only — never called for bulk listing.
-    public func revealField(at url: URL, masterPassword: String, entryUUID: String, fieldKey: String) throws -> String? {
-        try revealField(at: url, unlock: UnlockData(masterPassword: masterPassword), entryUUID: entryUUID, fieldKey: fieldKey)
-    }
-
-    /// Same as `revealField(at:masterPassword:entryUUID:fieldKey:)`, but
-    /// unlocking from a cached pre-hash — the path the extension uses after
-    /// Keychain/biometric rehydration.
-    public func revealField(at url: URL, rawKeyData: Data, entryUUID: String, fieldKey: String) throws -> String? {
-        try revealField(at: url, unlock: UnlockData(rawKeyData: rawKeyData), entryUUID: entryUUID, fieldKey: fieldKey)
-    }
-
-    private func revealField(at url: URL, unlock: UnlockData, entryUUID: String, fieldKey: String) throws -> String? {
-        let content = try openContent(at: url, unlock: unlock)
-
+    /// and field key, from an already-open vault. Pure in-memory walk +
+    /// inner-stream-cipher decrypt (fast, not Argon2) — no I/O, no KDF.
+    public func revealField(in content: KDBXContent, entryUUID: String, fieldKey: String) -> String? {
         var found: String?
 
         func walk(_ group: KDBX.Group) {
@@ -158,28 +163,45 @@ public struct VaultService: Sendable {
         return found
     }
 
+    /// Opens the vault fresh from disk and reveals one field in one call —
+    /// convenience for one-off reads. See `revealField(in:entryUUID:fieldKey:)`
+    /// for the reusable, no-KDF form.
+    public func revealField(at url: URL, masterPassword: String, entryUUID: String, fieldKey: String) throws -> String? {
+        revealField(in: try openVault(at: url, masterPassword: masterPassword), entryUUID: entryUUID, fieldKey: fieldKey)
+    }
+
+    /// Same as `revealField(at:masterPassword:entryUUID:fieldKey:)`, unlocking
+    /// from a cached pre-hash instead.
+    public func revealField(at url: URL, rawKeyData: Data, entryUUID: String, fieldKey: String) throws -> String? {
+        revealField(in: try openVault(at: url, rawKeyData: rawKeyData), entryUUID: entryUUID, fieldKey: fieldKey)
+    }
+
     // MARK: - TOTP (credential-selection time only)
 
     /// Reveals the `otp` field (the otpauth:// URI KeePassXC/pykeepass
     /// store TOTP secrets under — confirmed field name, see VaultService's
-    /// header) and returns the current 6-digit-by-default code. `nil` if
-    /// the entry has no `otp` field at all (most entries don't).
+    /// header) and returns the current 6-digit-by-default code, from an
+    /// already-open vault. `nil` if the entry has no `otp` field at all
+    /// (most entries don't). Pure in-memory — no I/O, no KDF.
+    public func currentTOTPCode(in content: KDBXContent, entryUUID: String) throws -> String? {
+        guard let otpauthURI = revealField(in: content, entryUUID: entryUUID, fieldKey: "otp"),
+              !otpauthURI.isEmpty
+        else { return nil }
+        let params = try TOTPGenerator.parse(otpauthURI: otpauthURI)
+        return TOTPGenerator.currentCode(for: params)
+    }
+
+    /// Opens the vault fresh from disk and computes the current TOTP code
+    /// in one call — convenience for one-off reads. See
+    /// `currentTOTPCode(in:entryUUID:)` for the reusable, no-KDF form.
     public func currentTOTPCode(at url: URL, masterPassword: String, entryUUID: String) throws -> String? {
-        try currentTOTPCode(at: url, unlock: UnlockData(masterPassword: masterPassword), entryUUID: entryUUID)
+        try currentTOTPCode(in: try openVault(at: url, masterPassword: masterPassword), entryUUID: entryUUID)
     }
 
     /// Same as `currentTOTPCode(at:masterPassword:entryUUID:)`, unlocking
     /// from a cached pre-hash instead.
     public func currentTOTPCode(at url: URL, rawKeyData: Data, entryUUID: String) throws -> String? {
-        try currentTOTPCode(at: url, unlock: UnlockData(rawKeyData: rawKeyData), entryUUID: entryUUID)
-    }
-
-    private func currentTOTPCode(at url: URL, unlock: UnlockData, entryUUID: String) throws -> String? {
-        guard let otpauthURI = try revealField(at: url, unlock: unlock, entryUUID: entryUUID, fieldKey: "otp"),
-              !otpauthURI.isEmpty
-        else { return nil }
-        let params = try TOTPGenerator.parse(otpauthURI: otpauthURI)
-        return TOTPGenerator.currentCode(for: params)
+        try currentTOTPCode(in: try openVault(at: url, rawKeyData: rawKeyData), entryUUID: entryUUID)
     }
 
     // MARK: - Writing (v2 — createVault/createEntry/updateEntry/deleteEntry)
@@ -285,16 +307,11 @@ public struct VaultService: Sendable {
     }
 
     /// Reveals an existing entry's editable fields, for populating an edit
-    /// form. Like `revealField`, this is a credential-selection-time-only
-    /// operation — never called for bulk listing.
-    public func revealEntry(uuid: String, at url: URL, rawKeyData: Data) throws -> EntryDraft {
-        try revealEntry(uuid: uuid, at: url, unlock: UnlockData(rawKeyData: rawKeyData))
-    }
-
-    private func revealEntry(uuid: String, at url: URL, unlock: UnlockData) throws -> EntryDraft {
-        let content = try openContent(at: url, unlock: unlock)
+    /// form, from an already-open vault. `nil` if no entry with that UUID
+    /// exists. Pure in-memory — no I/O, no KDF.
+    public func revealEntry(in content: KDBXContent, uuid: String) -> EntryDraft? {
         guard let entry = Self.findEntry(in: content.database.root.group, uuid: uuid) else {
-            throw VaultWriteError.entryNotFound(uuid)
+            return nil
         }
         func value(_ key: String) -> String {
             entry.strings.first(where: { $0.key == key })?.value.revealedString ?? ""
@@ -303,6 +320,20 @@ public struct VaultService: Sendable {
             title: value("Title"), username: value("UserName"), password: value("Password"),
             url: value("URL"), notes: value("Notes")
         )
+    }
+
+    /// Opens the vault fresh from disk and reveals one entry in one call —
+    /// convenience for one-off reads. See `revealEntry(in:uuid:)` for the
+    /// reusable, no-KDF form. Throws `.entryNotFound` if the UUID doesn't
+    /// exist (unlike the `in content:` form, which returns `nil` — kept as
+    /// a throw here to match this method's existing, already-tested
+    /// behavior).
+    public func revealEntry(uuid: String, at url: URL, rawKeyData: Data) throws -> EntryDraft {
+        let content = try openVault(at: url, rawKeyData: rawKeyData)
+        guard let draft = revealEntry(in: content, uuid: uuid) else {
+            throw VaultWriteError.entryNotFound(uuid)
+        }
+        return draft
     }
 
     // MARK: - Write-side tree helpers
