@@ -3,13 +3,13 @@
 > **Scope.** How the autonomous executor operates in this repo, how its changes are
 > reviewed and merged, and the kill-switch. Same governance pattern as
 > [`tooming/k8s-anywhere`](https://github.com/tooming/k8s-anywhere/blob/main/docs/WAYS-OF-WORKING.md)
-> and [`tooming/easysportstream`](https://github.com/tooming/easysportstream), sized down
+> and [`toomingsolutions/easysportstream`](https://github.com/tooming/easysportstream), sized down
 > for a small, solo-maintained repo with one trigger and no fallback-role chain.
 
 ## 0. Principles
 
 1. **The executor has full authority to merge its own PRs — no human merge gate** —
-   *unlike `tooming/easysportstream`, which never self-merges because its `main` deploys
+   *unlike `toomingsolutions/easysportstream`, which never self-merges because its `main` deploys
    to production instantly on merge. KeeBridge has no such deploy-on-merge: `main` only
    becomes a real build when someone runs Xcode/`xcodebuild` by hand, so the maintainer
    chose the same full-autonomy model as `tooming/k8s-anywhere`* (2026-08-25, explicit

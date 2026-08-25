@@ -4,7 +4,7 @@ The version-controlled **source of truth** for the scheduled remote Claude Code 
 develops this repo. The claude.ai routines backend holds the *running* state; the files
 here are the *desired* state. Same pattern as
 [`tooming/k8s-anywhere`](https://github.com/tooming/k8s-anywhere/tree/main/routines) and
-[`tooming/easysportstream`](https://github.com/tooming/easysportstream/tree/main/routines)
+[`toomingsolutions/easysportstream`](https://github.com/toomingsolutions/easysportstream/tree/main/routines)
 — see either repo's own `routines/README.md` for the fuller original writeup.
 
 ### Remote scheduled routine (cloud)

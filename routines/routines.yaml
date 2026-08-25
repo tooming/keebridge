@@ -1,6 +1,6 @@
 # Declarative source of truth for the scheduled remote agent ("routine") that develops
 # this repo. The claude.ai backend is the RUNNING state; this file is the DESIRED state.
-# Same pattern as tooming/k8s-anywhere and tooming/easysportstream — see either repo's
+# Same pattern as tooming/k8s-anywhere and toomingsolutions/easysportstream — see either repo's
 # routines/README.md for the fuller writeup this file's comments summarize.
 #
 # POINTER ARCHITECTURE: the live trigger's actual content is `live_prompt` below — a
