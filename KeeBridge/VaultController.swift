@@ -16,6 +16,7 @@ import Foundation
 import AppKit
 import AuthenticationServices
 import KeeBridgeCore
+import KDBXKit
 import os
 
 @MainActor
@@ -51,6 +52,19 @@ final class VaultController: ObservableObject {
     // prompting for Touch ID" was — not a hang, just a missing cache the
     // extension already had and the app didn't.
     private var cachedPreHash: Data?
+
+    // The decrypted vault, held for the session (v3). Without this, every
+    // single read — clicking a list row, opening Edit — independently
+    // re-opened the file from disk AND re-ran the full Argon2id KDF, same
+    // cost as unlock() itself; that's what KeePassXC does NOT do (it derives
+    // the key once and holds the decrypted database in memory), and why it
+    // has no equivalent lag. `KDBXContent`'s protected fields still use
+    // `.lazyInnerCipher` internally (see KDBXKit's ProtectedString.swift) —
+    // caching this does not mean plaintext secrets sit in memory, only the
+    // same post-KDF-pre-inner-cipher state KeePassXC itself holds. Refreshed
+    // on unlock, on refreshFromCache() (manual + throttled auto), and after
+    // every successful write.
+    private var cachedContent: KDBXContent?
 
     // Just remembering this app's own last pick between launches — no
     // cross-process sharing needed, so plain UserDefaults.standard.
@@ -109,7 +123,8 @@ final class VaultController: ObservableObject {
         log.notice("unlock: starting Argon2id verify on background task")
         Task.detached(priority: .userInitiated) { [vaultService, keychain, log] in
             do {
-                let entries = try vaultService.listEntries(at: vaultURL, masterPassword: password)
+                let content = try vaultService.openVault(at: vaultURL, masterPassword: password)
+                let entries = vaultService.listEntries(in: content)
                 let preHash = vaultService.preHashKeyData(forPassword: password)
                 try keychain.store(preHash)
                 try Self.mirrorVaultToExtension(from: vaultURL)
@@ -121,6 +136,7 @@ final class VaultController: ObservableObject {
                     self.isUnlocked = true
                     self.lastError = nil
                     self.cachedPreHash = preHash
+                    self.cachedContent = content
                     self.entries = entries
                     self.lastRefreshDate = Date()
                     self.populateIdentityStore(entries: entries)
@@ -173,14 +189,18 @@ final class VaultController: ObservableObject {
                 // Re-read the real (Google-Drive-synced) source and
                 // re-mirror it, so this also picks up edits made in
                 // KeePassXC since the last refresh — not just
-                // re-registering stale data.
-                let entries = try vaultService.listEntries(at: vaultURL, rawKeyData: preHash)
+                // re-registering stale data. Re-caches cachedContent too,
+                // since this is the mechanism (manual button + throttled
+                // auto-refresh) that's supposed to pick up external edits.
+                let content = try vaultService.openVault(at: vaultURL, rawKeyData: preHash)
+                let entries = vaultService.listEntries(in: content)
                 try Self.mirrorVaultToExtension(from: vaultURL)
 
                 await MainActor.run { [weak self] in
                     guard let self else { return }
                     self.isWorking = false
                     self.isUnlocked = true
+                    self.cachedContent = content
                     self.entries = entries
                     self.lastRefreshDate = Date()
                     self.populateIdentityStore(entries: entries)
@@ -209,6 +229,7 @@ final class VaultController: ObservableObject {
         isUnlocked = false
         entries = []
         cachedPreHash = nil
+        cachedContent = nil
     }
 
     func createNewVault(databaseName: String, masterPassword: String) {
@@ -256,12 +277,20 @@ final class VaultController: ObservableObject {
         isWorking = true
         Task.detached(priority: .userInitiated) { [vaultService] in
             do {
+                // Write path unchanged on purpose (see the v3 plan): fresh
+                // open-mutate-write, not against a possibly-stale cache —
+                // that's what keeps the window for clobbering a concurrent
+                // KeePassXC edit small. Only the POST-write re-list below
+                // uses openVault (vs. plain listEntries) so it can refresh
+                // cachedContent too, for free — same Argon2 cost either way.
                 _ = try vaultService.createEntry(draft, at: vaultURL, rawKeyData: preHash)
-                let entries = try vaultService.listEntries(at: vaultURL, rawKeyData: preHash)
+                let content = try vaultService.openVault(at: vaultURL, rawKeyData: preHash)
+                let entries = vaultService.listEntries(in: content)
                 try Self.mirrorVaultToExtension(from: vaultURL)
                 await MainActor.run { [weak self] in
                     guard let self else { return }
                     self.isWorking = false
+                    self.cachedContent = content
                     self.entries = entries
                     self.lastRefreshDate = Date()
                     self.populateIdentityStore(entries: entries)
@@ -281,11 +310,13 @@ final class VaultController: ObservableObject {
         Task.detached(priority: .userInitiated) { [vaultService] in
             do {
                 try vaultService.updateEntry(uuid: uuid, applying: draft, at: vaultURL, rawKeyData: preHash)
-                let entries = try vaultService.listEntries(at: vaultURL, rawKeyData: preHash)
+                let content = try vaultService.openVault(at: vaultURL, rawKeyData: preHash)
+                let entries = vaultService.listEntries(in: content)
                 try Self.mirrorVaultToExtension(from: vaultURL)
                 await MainActor.run { [weak self] in
                     guard let self else { return }
                     self.isWorking = false
+                    self.cachedContent = content
                     self.entries = entries
                     self.lastRefreshDate = Date()
                     self.populateIdentityStore(entries: entries)
@@ -305,11 +336,13 @@ final class VaultController: ObservableObject {
         Task.detached(priority: .userInitiated) { [vaultService] in
             do {
                 try vaultService.deleteEntry(uuid: uuid, at: vaultURL, rawKeyData: preHash)
-                let entries = try vaultService.listEntries(at: vaultURL, rawKeyData: preHash)
+                let content = try vaultService.openVault(at: vaultURL, rawKeyData: preHash)
+                let entries = vaultService.listEntries(in: content)
                 try Self.mirrorVaultToExtension(from: vaultURL)
                 await MainActor.run { [weak self] in
                     guard let self else { return }
                     self.isWorking = false
+                    self.cachedContent = content
                     self.entries = entries
                     self.lastRefreshDate = Date()
                     self.populateIdentityStore(entries: entries)
@@ -324,25 +357,22 @@ final class VaultController: ObservableObject {
     }
 
     /// Reveals a single entry's editable fields for populating the edit
-    /// form / detail view. Runs the Argon2id KDF on a background task, same
-    /// as everything else in this file — an earlier version ran this
-    /// synchronously on the caller (reasoning: "it's just one entry, fast
-    /// enough"), which was wrong in practice: it's the *same* Argon2id cost
-    /// as every other call here, and since this one fires on every single
-    /// list-row click, it was blocking the main thread on every click —
-    /// reported as "the app is quite slow," which is exactly what a
-    /// several-hundred-ms main-thread block per click looks like.
-    func revealEntryForEditing(uuid: String, completion: @escaping @Sendable (VaultService.EntryDraft?) -> Void) {
-        guard let vaultURL, let preHash = cachedPreHash else {
-            completion(nil)
-            return
-        }
-        Task.detached(priority: .userInitiated) { [vaultService] in
-            let draft = try? vaultService.revealEntry(uuid: uuid, at: vaultURL, rawKeyData: preHash)
-            await MainActor.run {
-                completion(draft)
-            }
-        }
+    /// form / detail view. Plain synchronous method, on purpose (v3): an
+    /// earlier version of this ran the Argon2id KDF per call — the same
+    /// cost as unlock() itself — synchronously on the caller, which
+    /// blocked the main thread on every single list-row click (reported as
+    /// "the app is quite slow"). A subsequent fix moved it to a
+    /// Task.detached + completion-closure to get it off main, which
+    /// *worked* but only treated the symptom — the deeper fix (v3, see the
+    /// plan) was caching the decrypted content for the session so this
+    /// operation is genuinely instant (pure in-memory, no Argon2, no I/O),
+    /// which makes the async indirection unnecessary complexity rather than
+    /// a real requirement. This isn't flip-flopping: the earlier fix was
+    /// correct for the architecture at the time; this supersedes it now
+    /// that the architecture is fixed properly.
+    func revealEntryForEditing(uuid: String) -> VaultService.EntryDraft? {
+        guard let cachedContent else { return nil }
+        return vaultService.revealEntry(in: cachedContent, uuid: uuid)
     }
 
     // MARK: - Mirroring into the extension's sandbox container
