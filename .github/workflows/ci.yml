@@ -1,0 +1,38 @@
+name: ci
+
+# The only gate this repo has: swift test (KeeBridgeCore, no signing needed) + an
+# unsigned xcodebuild build (KeeBridge, embeds KeeBridgeProvider) + the routines/
+# drift checks. Runs on macos-latest since swift/xcodebuild need a real macOS
+# toolchain — there's no clusterless/Linux-only split like the sibling repos, this
+# whole repo is macOS-only.
+#
+# `push` is scoped to main only; `pull_request` already covers every branch's PR
+# (opened/synchronize/reopened, including rebase pushes) — see tooming/k8s-anywhere's
+# ci.yml for the fuller rationale on why that avoids doubled runs.
+#
+# fetch-depth: 0 (full history): routines-author-check.sh derives the merge-base
+# with main and the commit author to decide whether an executor-authored (auto/*)
+# change edited routines.yaml — a shallow clone can't do that.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  ci:
+    runs-on: macos-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+      - name: Fetch main for drift comparison
+        run: git fetch --no-tags origin +refs/heads/main:refs/remotes/origin/main || true
+      - run: make test
+      - run: make build
+      - run: make routines-check
+      - run: make routines-author-check

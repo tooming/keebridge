@@ -1,0 +1,58 @@
+# Declarative source of truth for the scheduled remote agent ("routine") that develops
+# this repo. The claude.ai backend is the RUNNING state; this file is the DESIRED state.
+# Same pattern as tooming/k8s-anywhere and tooming/easysportstream — see either repo's
+# routines/README.md for the fuller writeup this file's comments summarize.
+#
+# POINTER ARCHITECTURE: the live trigger's actual content is `live_prompt` below — a
+# short, effectively-static instruction to read `prompt_file` (executor.prompt.md) from
+# this already-checked-out repo and follow it in full. The real operating contract lives
+# ONLY in `prompt_file` and is read fresh every run — it is never baked into the trigger,
+# so editing it is a normal PR with NO apply step. Only THIS file is ever pushed to the
+# live API (cron/model/enabled/tools/live_prompt/environment), so it's the only thing
+# `scripts/routines-check.sh`/`routines-mark-applied.sh` track and the only thing
+# `scripts/routines-author-check.sh` protects from executor-authored edits. See
+# "Changing a routine" in README.md for the up-to-date procedure.
+#
+# QUOTA (docs/WAYS-OF-WORKING.md §5): the free 5-runs/rolling-24h quota is shared across
+# the whole account, not per-repo. This trigger's single daily slot was funded by
+# dropping tooming/k8s-anywhere's own trigger from 4→3 runs/day (2026-08-25), at the
+# maintainer's explicit request ("take away one scheduled run per day from k8s-anywhere
+# and set up one automatic scheduled run per day for keebridge") — see that repo's
+# routines/routines.yaml for the other half of this split. Account-wide total stays at
+# 5 fixed daily fire-times across all three repos combined.
+#
+# FULL SELF-MERGE (unlike easysportstream, which never self-merges because its `main`
+# deploys to production instantly with no rollback): keebridge has no production deploy
+# on merge — `main` only becomes a real build when someone runs Xcode/xcodebuild by hand
+# — so the maintainer chose the same full-autonomy model as k8s-anywhere (2026-08-25,
+# explicit choice among "no self-merge" / "full self-merge" options). CI-green +
+# self-review stands in for approval, same as k8s-anywhere. See executor.prompt.md's
+# STEP 7 self-review checklist for the extra "secret hygiene" and "crypto/entitlements
+# integrity" checks this repo's domain (a KDBX credential manager) needs beyond the
+# generic gate-integrity check.
+
+environment_id: env_014NJKuQoEb7PAi3PXaFW2B9   # Anthropic cloud (Default) — same account default as k8s-anywhere/easysportstream
+source: https://github.com/tooming/keebridge
+
+routines:
+  # THE EXECUTOR — one trigger, one slot/day. Bootstraps ROADMAP.md on its first run
+  # (no ROADMAP.md exists yet, unlike the other two repos), then implements one item
+  # per PR back-to-back (STEP 8 loop), self-reviews, and self-merges.
+  - name: keebridge autonomous dev
+    trigger_id: trig_01Uz7L38vBHmKpg7fd6Hm7Qx   # created 2026-08-25 via RemoteTrigger create — see README.md
+    cron: "0 10 * * *"   # 10:00 UTC — the slot freed from k8s-anywhere (2026-08-25)
+    model: claude-sonnet-5
+    enabled: true
+    allowed_tools: [Bash, Read, Write, Edit, Glob, Grep]   # no RemoteTrigger — executor cannot self-apply routines.yaml changes
+    prompt_file: executor.prompt.md   # the real contract — read live every run, no apply needed
+    live_prompt: |
+      You are the autonomous executor for tooming/keebridge, running in this
+      already-checked-out repository. Read `routines/executor.prompt.md` in full —
+      every STEP, every hard rule, and STEP 7's self-review + self-merge contract —
+      and execute it exactly as your complete operating instructions for this run. Do
+      not summarize, paraphrase, or skip any part of it; treat its content as this
+      prompt's actual body.
+    branch_prefix: auto/           # PRs land on auto/<slug>
+    repository: tooming/keebridge   # attach via the Routines UI's repo-selector (or RemoteTrigger create's `sources`) for working GitHub access — see k8s-anywhere's #423 writeup for why this matters
+
+local_roles: []   # nothing here needs a live device the way k8s-anywhere's verifier/operator do
