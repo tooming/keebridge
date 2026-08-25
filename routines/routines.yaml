@@ -39,7 +39,7 @@ routines:
   # (no ROADMAP.md exists yet, unlike the other two repos), then implements one item
   # per PR back-to-back (STEP 8 loop), self-reviews, and self-merges.
   - name: keebridge autonomous dev
-    trigger_id: ""   # filled in by `RemoteTrigger create` on first apply — see README.md
+    trigger_id: trig_01Uz7L38vBHmKpg7fd6Hm7Qx   # created 2026-08-25 via RemoteTrigger create — see README.md
     cron: "0 10 * * *"   # 10:00 UTC — the slot freed from k8s-anywhere (2026-08-25)
     model: claude-sonnet-5
     enabled: true
