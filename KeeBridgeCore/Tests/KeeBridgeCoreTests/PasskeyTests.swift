@@ -1,11 +1,12 @@
 // Copyright (c) 2026 Martin Tooming
 // SPDX-License-Identifier: MIT
 //
-// Passkey read-only metadata tests — build a passkey-bearing entry
-// directly via KDBXKit's own KeePassXC-compatible setPasskey* methods
-// (VaultService has no write-side passkey API yet, only read), write it
-// to a temp vault the same way VaultService's private write() does, then
-// confirm VaultService's new read-only accessors surface it correctly.
+// Passkey metadata tests — read side (VaultService.passkeyMetadata) and
+// write side (VaultService.setPasskey). The read tests build a
+// passkey-bearing entry directly via KDBXKit's own KeePassXC-compatible
+// setPasskey* methods, written to a temp vault the same low-level way
+// VaultService's private write() does, since VaultService itself had no
+// passkey write API to build one through until this file's write tests.
 // Uses only synthetic data (a mock PEM string, a throwaway tempdir vault,
 // the repo's standard fake password) — no real vault or credential
 // material, same discipline as every other test in this package.
@@ -107,4 +108,57 @@ private func makeVaultWithPasskeyEntry(at url: URL) throws -> String {
 
     let metadata = try service.passkeyMetadata(at: url, masterPassword: testPassword, entryUUID: UUID().uuidString)
     #expect(metadata == nil)
+}
+
+@Test func setPasskeyAddsPasskeyFieldsWithoutTouchingOtherFields() throws {
+    let service = VaultService()
+    let url = tempVaultURL()
+    defer { try? FileManager.default.removeItem(at: url) }
+    try service.createVault(at: url, masterPassword: testPassword, databaseName: "Test Vault")
+
+    // A plain login entry, no passkey fields yet.
+    let draft = VaultService.EntryDraft(title: "example.com", username: "alice", password: "s3cret")
+    let uuid = try service.createEntry(draft, at: url, masterPassword: testPassword)
+
+    try service.setPasskey(
+        uuid: uuid,
+        relyingParty: "example.com",
+        credentialID: Data([0xAA, 0xBB]),
+        privateKeyPEM: "-----BEGIN PRIVATE KEY-----\nMOCK-NOT-A-REAL-KEY\n-----END PRIVATE KEY-----",
+        username: "alice@example.com",
+        userHandle: Data([0xCC]),
+        at: url, masterPassword: testPassword
+    )
+
+    let entries = try service.listEntries(at: url, masterPassword: testPassword)
+    #expect(entries.count == 1)
+    #expect(entries[0].isPasskey == true)
+    // The original login fields must survive setPasskey untouched.
+    #expect(entries[0].title == "example.com")
+    #expect(entries[0].username == "alice")
+    let preHash = service.preHashKeyData(forPassword: testPassword)
+    let revealed = try service.revealEntry(uuid: uuid, at: url, rawKeyData: preHash)
+    #expect(revealed.password == "s3cret")
+
+    let metadata = try service.passkeyMetadata(at: url, masterPassword: testPassword, entryUUID: uuid)
+    #expect(metadata?.relyingParty == "example.com")
+    #expect(metadata?.username == "alice@example.com")
+    #expect(metadata?.credentialID == Data([0xAA, 0xBB]))
+}
+
+@Test func setPasskeyThrowsForUnknownUUID() throws {
+    let service = VaultService()
+    let url = tempVaultURL()
+    defer { try? FileManager.default.removeItem(at: url) }
+    try service.createVault(at: url, masterPassword: testPassword, databaseName: "Test Vault")
+
+    #expect(throws: (any Error).self) {
+        try service.setPasskey(
+            uuid: UUID().uuidString,
+            relyingParty: "example.com",
+            credentialID: Data([0x01]),
+            privateKeyPEM: "-----BEGIN PRIVATE KEY-----\nMOCK\n-----END PRIVATE KEY-----",
+            at: url, masterPassword: testPassword
+        )
+    }
 }
