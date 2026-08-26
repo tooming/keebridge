@@ -281,6 +281,14 @@ public struct VaultService: Sendable {
         try updateEntry(uuid: uuid, applying: draft, at: url, unlock: UnlockData(rawKeyData: rawKeyData))
     }
 
+    /// Same as `updateEntry(uuid:applying:at:rawKeyData:)`, unlocking from a
+    /// plaintext master password instead — for callers with no cached
+    /// pre-hash (e.g. a CLI prompting via `getpass()`, not backed by
+    /// Keychain).
+    public func updateEntry(uuid: String, applying draft: EntryDraft, at url: URL, masterPassword: String) throws {
+        try updateEntry(uuid: uuid, applying: draft, at: url, unlock: UnlockData(masterPassword: masterPassword))
+    }
+
     private func updateEntry(uuid: String, applying draft: EntryDraft, at url: URL, unlock: UnlockData) throws {
         var content = try openContent(at: url, unlock: unlock)
         let found = Self.mutateEntry(in: &content.database.root.group, uuid: uuid) { entry in
@@ -297,6 +305,14 @@ public struct VaultService: Sendable {
     /// model one). Throws `.entryNotFound` if the UUID doesn't exist.
     public func deleteEntry(uuid: String, at url: URL, rawKeyData: Data) throws {
         try deleteEntry(uuid: uuid, at: url, unlock: UnlockData(rawKeyData: rawKeyData))
+    }
+
+    /// Same as `deleteEntry(uuid:at:rawKeyData:)`, unlocking from a
+    /// plaintext master password instead — for callers with no cached
+    /// pre-hash (e.g. a CLI prompting via `getpass()`, not backed by
+    /// Keychain).
+    public func deleteEntry(uuid: String, at url: URL, masterPassword: String) throws {
+        try deleteEntry(uuid: uuid, at: url, unlock: UnlockData(masterPassword: masterPassword))
     }
 
     private func deleteEntry(uuid: String, at url: URL, unlock: UnlockData) throws {

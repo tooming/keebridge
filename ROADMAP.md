@@ -59,9 +59,16 @@
 - [x] ~~`--json` output mode for the CLI tool above~~ — done, see
       `docs/done/2026-08-26-vaultprobe-json-output.md`. Every subcommand now takes
       `--json`.
-- [ ] Write support (`create`/`update`/`delete` subcommands) for the CLI tool, via the
-      already-built `VaultService` write methods — higher-value and higher-risk than the
-      read-only subcommands; do once those have proven the subcommand/parsing shape out.
+- [x] ~~Add `masterPassword`-based `updateEntry`/`deleteEntry` overloads to
+      `VaultService`~~ — done, see `docs/done/2026-08-26-vaultservice-write-overloads.md`.
+      Foundation piece discovered while scoping the CLI's write subcommands below: only
+      `rawKeyData`-based overloads existed (fine for the app, which has a cached
+      pre-hash; not fine for a CLI prompting via `getpass()` with no Keychain). `create`
+      already had both forms; `update`/`delete` now do too.
+- [ ] Write subcommands (`create`/`update`/`delete`) for the CLI tool, via the
+      `VaultService` write methods (all now have `masterPassword` overloads) — higher-value
+      and higher-risk than the read-only subcommands; do once those have proven the
+      subcommand/parsing shape out (they have, see the `list`/`reveal`/`totp` items above).
 
 ## Needs maintainer/human action (not code)
 

@@ -86,6 +86,31 @@ private func tempVaultURL() -> URL {
     #expect(revealed.password == "new-pass")
 }
 
+@Test func updateEntryWithMasterPasswordOverwritesFields() throws {
+    // Same as updateEntryOverwritesFields, but through the masterPassword
+    // overload instead of rawKeyData — for callers with no cached pre-hash
+    // (e.g. a CLI prompting via getpass(), not backed by Keychain).
+    let service = VaultService()
+    let url = tempVaultURL()
+    defer { try? FileManager.default.removeItem(at: url) }
+    try service.createVault(at: url, masterPassword: testPassword, databaseName: "Test Vault")
+
+    let original = VaultService.EntryDraft(title: "Old", username: "old-user", password: "old-pass")
+    let uuid = try service.createEntry(original, at: url, masterPassword: testPassword)
+
+    let updated = VaultService.EntryDraft(title: "New", username: "new-user", password: "new-pass")
+    try service.updateEntry(uuid: uuid, applying: updated, at: url, masterPassword: testPassword)
+
+    let entries = try service.listEntries(at: url, masterPassword: testPassword)
+    #expect(entries.count == 1)
+    #expect(entries[0].title == "New")
+    #expect(entries[0].username == "new-user")
+
+    let preHash = service.preHashKeyData(forPassword: testPassword)
+    let revealed = try service.revealEntry(uuid: uuid, at: url, rawKeyData: preHash)
+    #expect(revealed.password == "new-pass")
+}
+
 @Test func updateEntryThrowsForUnknownUUID() throws {
     let service = VaultService()
     let url = tempVaultURL()
@@ -126,6 +151,24 @@ private func tempVaultURL() -> URL {
     #expect(throws: (any Error).self) {
         try service.deleteEntry(uuid: UUID().uuidString, at: url, rawKeyData: preHash)
     }
+}
+
+@Test func deleteEntryWithMasterPasswordRemovesIt() throws {
+    // Same as deleteEntryRemovesIt, but through the masterPassword overload.
+    let service = VaultService()
+    let url = tempVaultURL()
+    defer { try? FileManager.default.removeItem(at: url) }
+    try service.createVault(at: url, masterPassword: testPassword, databaseName: "Test Vault")
+
+    let uuid1 = try service.createEntry(.init(title: "Keep"), at: url, masterPassword: testPassword)
+    let uuid2 = try service.createEntry(.init(title: "Delete me"), at: url, masterPassword: testPassword)
+    #expect(try service.listEntries(at: url, masterPassword: testPassword).count == 2)
+
+    try service.deleteEntry(uuid: uuid2, at: url, masterPassword: testPassword)
+
+    let remaining = try service.listEntries(at: url, masterPassword: testPassword)
+    #expect(remaining.count == 1)
+    #expect(remaining[0].uuid == uuid1)
 }
 
 @Test func multipleEntriesSurviveMultipleWrites() throws {
