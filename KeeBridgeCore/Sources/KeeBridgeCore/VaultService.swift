@@ -18,13 +18,23 @@ public struct VaultLoginEntry: Sendable {
     public let username: String
     public let url: String
     public let customFieldKeys: [String]
+    /// Whether this entry carries a passkey, per KDBXKit's own KeePassXC-
+    /// compatible field detection (`KDBX.Entry.isPasskey` — the
+    /// `KPEX_PASSKEY_*` custom-string-field convention, not a file
+    /// attachment). Never exposes the private key itself — see
+    /// `VaultService.passkeyMetadata` for the (still-secret-free) relying
+    /// party/username/credential-ID fields, and the passkey design spike
+    /// (`docs/done/2026-08-26-passkey-design-spike.md`) for why this repo
+    /// follows KeePassXC's convention rather than inventing its own.
+    public let isPasskey: Bool
 
-    public init(uuid: String, title: String, username: String, url: String, customFieldKeys: [String]) {
+    public init(uuid: String, title: String, username: String, url: String, customFieldKeys: [String], isPasskey: Bool = false) {
         self.uuid = uuid
         self.title = title
         self.username = username
         self.url = url
         self.customFieldKeys = customFieldKeys
+        self.isPasskey = isPasskey
     }
 }
 
@@ -110,7 +120,8 @@ public struct VaultService: Sendable {
                     title: title.isEmpty ? "(untitled)" : title,
                     username: username,
                     url: entryURL,
-                    customFieldKeys: customKeys
+                    customFieldKeys: customKeys,
+                    isPasskey: entry.isPasskey
                 ))
             }
             for child in group.groups {
@@ -202,6 +213,55 @@ public struct VaultService: Sendable {
     /// from a cached pre-hash instead.
     public func currentTOTPCode(at url: URL, rawKeyData: Data, entryUUID: String) throws -> String? {
         try currentTOTPCode(in: try openVault(at: url, rawKeyData: rawKeyData), entryUUID: entryUUID)
+    }
+
+    // MARK: - Passkeys (read-only metadata — no signing/registration yet)
+
+    /// Non-secret passkey metadata for one entry: relying party, WebAuthn
+    /// username, and (base64url-decoded) credential ID. Deliberately never
+    /// includes the private key — that stays out of `VaultService`'s
+    /// surface until real WebAuthn assertion-signing logic exists to
+    /// consume it, matching this repo's reveal-on-demand secret-hygiene
+    /// discipline for every other field (`revealField`, `currentTOTPCode`).
+    public struct VaultPasskeyMetadata: Sendable {
+        public let relyingParty: String?
+        public let username: String?
+        public let credentialID: Data?
+
+        public init(relyingParty: String?, username: String?, credentialID: Data?) {
+            self.relyingParty = relyingParty
+            self.username = username
+            self.credentialID = credentialID
+        }
+    }
+
+    /// Non-secret passkey metadata for one entry, from an already-open
+    /// vault. `nil` if no entry with that UUID exists, or it exists but
+    /// isn't a passkey (per `KDBX.Entry.isPasskey` — KDBXKit's own
+    /// KeePassXC-compatible field detection). Pure in-memory — no I/O, no
+    /// KDF, safe to call repeatedly.
+    public func passkeyMetadata(in content: KDBXContent, entryUUID: String) -> VaultPasskeyMetadata? {
+        guard let entry = Self.findEntry(in: content.database.root.group, uuid: entryUUID),
+              entry.isPasskey
+        else { return nil }
+        return VaultPasskeyMetadata(
+            relyingParty: entry.passkeyRelyingParty,
+            username: entry.passkeyUsername,
+            credentialID: entry.passkeyCredentialID
+        )
+    }
+
+    /// Opens the vault fresh from disk and reads one entry's passkey
+    /// metadata in one call — convenience for one-off reads. See
+    /// `passkeyMetadata(in:entryUUID:)` for the reusable, no-KDF form.
+    public func passkeyMetadata(at url: URL, masterPassword: String, entryUUID: String) throws -> VaultPasskeyMetadata? {
+        passkeyMetadata(in: try openVault(at: url, masterPassword: masterPassword), entryUUID: entryUUID)
+    }
+
+    /// Same as `passkeyMetadata(at:masterPassword:entryUUID:)`, unlocking
+    /// from a cached pre-hash instead.
+    public func passkeyMetadata(at url: URL, rawKeyData: Data, entryUUID: String) throws -> VaultPasskeyMetadata? {
+        passkeyMetadata(in: try openVault(at: url, rawKeyData: rawKeyData), entryUUID: entryUUID)
     }
 
     // MARK: - Writing (v2 — createVault/createEntry/updateEntry/deleteEntry)
