@@ -48,11 +48,20 @@
 - [ ] QR code scanning for adding a passkey (#7) — some sites offer a QR code to add a
       passkey; KeeBridge should support scanning it. Depends on passkey support (#4)
       existing first — not buildable until that lands.
-- [ ] CLI tool feasibility spike (#9) — look into the feasibility of a headless CLI tool
-      (e.g. vault query/reveal without the GUI app). Exploratory: a written
-      recommendation (approach, what `KeeBridgeCore` already gives you for free via
-      `VaultProbe`'s pattern, open questions) is an acceptable first deliverable, not
-      necessarily code.
+- [x] ~~CLI tool feasibility spike (#9)~~ — done, see
+      `docs/done/2026-08-26-cli-tool-feasibility-spike.md`. Verdict: feasible and cheap —
+      `VaultProbe` already solves the hard parts (KeeBridgeCore integration, non-echoing
+      password entry). Follow-up items below are the groomed sequencing it recommended.
+- [ ] Give `VaultProbe` real subcommands (`list`, `reveal <uuid> <field>`, `totp <uuid>`)
+      via `swift-argument-parser`, read-only, built on `VaultService`'s existing read
+      methods — see the CLI feasibility spike doc for the full recommendation. Fold a
+      `swift build` for `VaultProbe` into `make ci` in the same PR — it isn't gated by CI
+      today.
+- [ ] `--json` output mode for the CLI tool above, for scriptability — depends on the
+      subcommand work landing first.
+- [ ] Write support (`create`/`update`/`delete` subcommands) for the CLI tool, via the
+      already-built `VaultService` write methods — higher-value and higher-risk than the
+      read-only subcommands; do once those have proven the subcommand/parsing shape out.
 
 ## Needs maintainer/human action (not code)
 
