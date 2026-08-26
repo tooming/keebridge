@@ -64,6 +64,44 @@ private func tempVaultURL() -> URL {
     #expect(revealed.notes == "a note")
 }
 
+@Test func revealEntryWithMasterPasswordMatchesRawKeyData() throws {
+    // Same as createEntryRoundTrips' reveal check, but through the
+    // masterPassword overload instead of rawKeyData — for callers with no
+    // cached pre-hash (e.g. a CLI prompting via getpass(), not backed by
+    // Keychain).
+    let service = VaultService()
+    let url = tempVaultURL()
+    defer { try? FileManager.default.removeItem(at: url) }
+    try service.createVault(at: url, masterPassword: testPassword, databaseName: "Test Vault")
+
+    let draft = VaultService.EntryDraft(
+        title: "Example", username: "alice", password: "s3cret", url: "https://example.com", notes: "a note"
+    )
+    let newUUID = try service.createEntry(draft, at: url, masterPassword: testPassword)
+
+    let preHash = service.preHashKeyData(forPassword: testPassword)
+    let viaRawKeyData = try service.revealEntry(uuid: newUUID, at: url, rawKeyData: preHash)
+    let viaMasterPassword = try service.revealEntry(uuid: newUUID, at: url, masterPassword: testPassword)
+
+    #expect(viaMasterPassword.title == viaRawKeyData.title)
+    #expect(viaMasterPassword.username == viaRawKeyData.username)
+    #expect(viaMasterPassword.password == viaRawKeyData.password)
+    #expect(viaMasterPassword.url == viaRawKeyData.url)
+    #expect(viaMasterPassword.notes == viaRawKeyData.notes)
+    #expect(viaMasterPassword.password == "s3cret")
+}
+
+@Test func revealEntryWithMasterPasswordThrowsForUnknownUUID() throws {
+    let service = VaultService()
+    let url = tempVaultURL()
+    defer { try? FileManager.default.removeItem(at: url) }
+    try service.createVault(at: url, masterPassword: testPassword, databaseName: "Test Vault")
+
+    #expect(throws: (any Error).self) {
+        try service.revealEntry(uuid: UUID().uuidString, at: url, masterPassword: testPassword)
+    }
+}
+
 @Test func updateEntryOverwritesFields() throws {
     let service = VaultService()
     let url = tempVaultURL()
