@@ -56,8 +56,9 @@
       — done, see `docs/done/2026-08-26-vaultprobe-subcommands.md`. Now built on
       `swift-argument-parser`; `make ci`/`ci.yml` gained a `probe-build` step so this
       target is actually gated going forward.
-- [ ] `--json` output mode for the CLI tool above, for scriptability — depends on the
-      subcommand work landing first.
+- [x] ~~`--json` output mode for the CLI tool above~~ — done, see
+      `docs/done/2026-08-26-vaultprobe-json-output.md`. Every subcommand now takes
+      `--json`.
 - [ ] Write support (`create`/`update`/`delete` subcommands) for the CLI tool, via the
       already-built `VaultService` write methods — higher-value and higher-risk than the
       read-only subcommands; do once those have proven the subcommand/parsing shape out.
