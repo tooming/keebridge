@@ -80,23 +80,34 @@
       `KPEX_PASSKEY_PRIVATE_KEY_PEM` convention expects. Still no CBOR/COSE/
       `attestationObject` construction — just the key-gen/signing primitives real
       registration/assertion code will call.
-- [ ] Passkey support: registration + assertion signing (#4) — highest-risk,
-      highest-effort item, deliberately last, needs none of the blocked-Xcode-target
-      work #3 does (all of it lands in the *existing* `KeeBridgeProvider` target +
-      `KeeBridgeCore`, both already touched by the read/write/crypto slices above).
-      Requires a real CBOR-encoded `attestationObject` (COSE_Key encoding for the public
-      key — `PasskeyCrypto` doesn't extract/encode the public key yet, only sign; the
-      `rawRepresentation`/`x963Representation` distinction on `P256.Signing.PublicKey`
-      needs confirming against the WebAuthn COSE_Key spec before writing that, not
-      guessed at), plus `ASPasskeyCredentialRequest`/`ASPasskeyRegistrationCredential`/
-      `ASPasskeyAssertionCredential` — a materially bigger `AuthenticationServices`
-      surface than passwords/OTP. Declare `ProvidesPasskeys: true` in
-      `KeeBridgeProvider/Info.plist` only once this request-handling actually exists —
-      declaring the capability first would advertise something the extension can't yet
-      fulfill. The 9 Proton-Pass-carried passkeys stay informational-only per the design
-      spike's recommendation — reconstructing them (separate proprietary double-nested
-      MessagePack format) is optional, riskier follow-up, not a blocker. Expect this to
-      need its own groomed sub-items rather than one PR.
+- [x] ~~Passkey support: COSE_Key public-key encoding (`PasskeyCrypto.coseEncodedPublicKey`) (#4)~~
+      — done, see `docs/done/2026-08-26-passkey-cose-key.md`. Confirmed
+      `P256.Signing.PublicKey.rawRepresentation` is raw `X‖Y` (64 bytes, no `0x04`
+      prefix — `x963Representation` is the one that prepends it), then hand-encodes the
+      fixed five-field COSE_Key CBOR map (`kty`=2 EC2, `alg`=-7 ES256, `crv`=1 P-256,
+      `x`/`y`) per RFC 9053 — the exact structure a WebAuthn `attestationObject` embeds
+      as its credential public key. Still no `attestationObject`/`authData` envelope
+      construction — just this one CBOR map.
+- [ ] Passkey support: `attestationObject`/`authData` construction + registration/
+      assertion request handling (#4) — highest-risk, highest-effort item, deliberately
+      last, needs none of the blocked-Xcode-target work #3 does (all of it lands in the
+      *existing* `KeeBridgeProvider` target + `KeeBridgeCore`, all three already touched
+      by the read/write/crypto slices above). `PasskeyCrypto` now has every primitive
+      (key generation, signing, public-key COSE encoding) this needs — what's left is
+      wiring: the `authData` byte layout (RP ID hash, flags, sign count, AAGUID,
+      credential ID, the COSE_Key bytes above), wrapping it in the CBOR
+      `attestationObject` map (`fmt`/`attStmt`/`authData`), and the actual
+      `ASPasskeyCredentialRequest`/`ASPasskeyRegistrationCredential`/
+      `ASPasskeyAssertionCredential` implementation — a materially bigger
+      `AuthenticationServices` surface than passwords/OTP, and the one piece of this
+      that's genuinely hard to verify headlessly (needs a real Safari passkey flow).
+      Declare `ProvidesPasskeys: true` in `KeeBridgeProvider/Info.plist` only once this
+      request-handling actually exists — declaring the capability first would advertise
+      something the extension can't yet fulfill. The 9 Proton-Pass-carried passkeys stay
+      informational-only per the design spike's recommendation — reconstructing them
+      (separate proprietary double-nested MessagePack format) is optional, riskier
+      follow-up, not a blocker. Expect this to need its own groomed sub-items rather than
+      one PR.
 - [ ] QR code scanning for adding a passkey (#7) — some sites offer a QR code to add a
       passkey; KeeBridge should support scanning it. Depends on passkey support (#4)
       existing first — not buildable until that lands.
