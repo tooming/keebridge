@@ -1,10 +1,11 @@
 name: ci
 
 # The only gate this repo has: swift test (KeeBridgeCore, no signing needed) + an
-# unsigned xcodebuild build (KeeBridge, embeds KeeBridgeProvider) + the routines/
-# drift checks. Runs on macos-latest since swift/xcodebuild need a real macOS
-# toolchain — there's no clusterless/Linux-only split like the sibling repos, this
-# whole repo is macOS-only.
+# unsigned xcodebuild build (KeeBridge, embeds KeeBridgeProvider) + a swift build
+# of VaultProbe (its own SPM package, not part of the Xcode project) + the
+# routines/ drift checks. Runs on macos-latest since swift/xcodebuild need a real
+# macOS toolchain — there's no clusterless/Linux-only split like the sibling
+# repos, this whole repo is macOS-only.
 #
 # `push` is scoped to main only; `pull_request` already covers every branch's PR
 # (opened/synchronize/reopened, including rebase pushes) — see tooming/k8s-anywhere's
@@ -34,5 +35,6 @@ jobs:
         run: git fetch --no-tags origin +refs/heads/main:refs/remotes/origin/main || true
       - run: make test
       - run: make build
+      - run: make probe-build
       - run: make routines-check
       - run: make routines-author-check

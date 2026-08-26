@@ -52,11 +52,10 @@
       `docs/done/2026-08-26-cli-tool-feasibility-spike.md`. Verdict: feasible and cheap —
       `VaultProbe` already solves the hard parts (KeeBridgeCore integration, non-echoing
       password entry). Follow-up items below are the groomed sequencing it recommended.
-- [ ] Give `VaultProbe` real subcommands (`list`, `reveal <uuid> <field>`, `totp <uuid>`)
-      via `swift-argument-parser`, read-only, built on `VaultService`'s existing read
-      methods — see the CLI feasibility spike doc for the full recommendation. Fold a
-      `swift build` for `VaultProbe` into `make ci` in the same PR — it isn't gated by CI
-      today.
+- [x] ~~Give `VaultProbe` real subcommands (`list`, `reveal <uuid> <field>`, `totp <uuid>`)~~
+      — done, see `docs/done/2026-08-26-vaultprobe-subcommands.md`. Now built on
+      `swift-argument-parser`; `make ci`/`ci.yml` gained a `probe-build` step so this
+      target is actually gated going forward.
 - [ ] `--json` output mode for the CLI tool above, for scriptability — depends on the
       subcommand work landing first.
 - [ ] Write support (`create`/`update`/`delete` subcommands) for the CLI tool, via the
