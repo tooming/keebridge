@@ -35,27 +35,43 @@
 - [ ] Credit card autofill implementation (#3) — the actual Safari Web Extension target
       (new JS/TS tech stack: content script + background script +
       `SafariWebExtensionHandler` native handler), built on the design spike above.
-      Scope for the first PR: extend the app's existing mirroring
-      (`mirrorVaultToExtension`'s sibling) to also mirror card entries into the new
-      extension target's container — that alone is a focused, `KeeBridgeCore`/app-side
-      slice with no new JS yet. The content script + field-detection heuristics +
-      fill UI is genuinely new tech stack work; expect it to need its own follow-up
-      item(s) once the mirroring foundation lands. Still unresolved (needs the
-      maintainer, not the headless executor): the actual field-name convention the 9
-      real card entries use — no conversion script or existing card-handling code in
-      this repo confirms it, and there's no real vault here to inspect.
-- [ ] Passkey support: WebAuthn provider + vault write (#4) — highest-risk, highest-effort
-      item, deliberately last. Its dependency (vault write support, #1) is done. Requires
-      a real CBOR-encoded `attestationObject`, P-256/ES256 assertion signing, and
+      **Blocked in this executor's environment**: this needs a brand-new Xcode target,
+      and there's no `xcodegen` binary here to regenerate `KeeBridge.xcodeproj` from
+      `project.yml` after adding one — confirmed 2026-08-26 (`which xcodegen` → nothing).
+      The checked-in `project.pbxproj` uses the classic explicit
+      `PBXFileReference`/`PBXBuildFile` format (no modern synchronized-folder groups —
+      grepped, zero matches), so hand-adding a whole new target's build phases by
+      editing that file directly, with no way to validate the result short of a real
+      Xcode install, is a correctness risk not worth taking headless. Content edits to
+      *existing* targets' files (Swift sources, `Info.plist`, entitlements) remain
+      safe and unaffected by this — see the passkey item below, which needs none of
+      that. Once `xcodegen` is available in this environment (or a human adds the
+      target once, by hand, in real Xcode), scope for the first PR: extend the app's
+      existing mirroring (`mirrorVaultToExtension`'s sibling) to also mirror card
+      entries into the new extension target's container — a focused,
+      `KeeBridgeCore`/app-side slice with no new JS yet. Still unresolved (needs the
+      maintainer): the actual field-name convention the 9 real card entries use.
+- [x] ~~Passkey support: storage convention + platform-risk design spike (#4)~~ — done,
+      see `docs/done/2026-08-26-passkey-design-spike.md`. Confirmed KeePassXC 2.7.7+'s
+      own passkey storage convention (a `webauthn.pem` file attachment + the WebAuthn
+      username in the password field) — new passkeys KeeBridge creates should follow
+      this, not invent a third format, for KeePassXC interop. Confirmed the AAGUID-
+      zeroing platform risk is real and current (Developer Forums thread 814547),
+      possibly an intentional Apple privacy choice rather than a third-party-specific
+      bug — proceed anyway, just document the limitation plainly.
+- [ ] Passkey support: implementation (#4) — highest-risk, highest-effort item,
+      deliberately last, needs none of the blocked-Xcode-target work #3 does (all of it
+      lands in the *existing* `KeeBridgeProvider` target + `KeeBridgeCore`). Requires a
+      real CBOR-encoded `attestationObject`, P-256/ES256 assertion signing, and
       `ASPasskeyCredentialRequest`/`ASPasskeyRegistrationCredential`/
-      `ASPasskeyAssertionCredential` — a materially bigger `AuthenticationServices` surface
-      than passwords/OTP. There is a documented, unresolved Apple-side bug (Developer
-      Forums thread 814547) that silently zeroes a third-party macOS passkey provider's
-      AAGUID and misreports it as iCloud Keychain to the relying party — real platform
-      risk, not hypothetical. The 9 Proton-Pass-carried passkeys in the vault are not
-      directly portable (proprietary double-nested MessagePack format) — decide whether to
-      reconstruct them or treat them as informational-only and re-create passkeys fresh
-      per site. Expect this to need its own groomed sub-items rather than one PR.
+      `ASPasskeyAssertionCredential` — a materially bigger `AuthenticationServices`
+      surface than passwords/OTP; a reasonable first slice is just declaring
+      `ProvidesPasskeys: true` in the already-checked-in `KeeBridgeProvider/Info.plist`
+      (a plain content edit, no `xcodegen` needed). The 9 Proton-Pass-carried passkeys
+      stay informational-only per the design spike's recommendation — reconstructing
+      them (proprietary double-nested MessagePack) is a separate, optional, riskier
+      follow-up, not a blocker for shipping new-passkey creation. Expect this to need
+      its own groomed sub-items rather than one PR.
 - [ ] QR code scanning for adding a passkey (#7) — some sites offer a QR code to add a
       passkey; KeeBridge should support scanning it. Depends on passkey support (#4)
       existing first — not buildable until that lands.
