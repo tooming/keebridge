@@ -65,13 +65,19 @@
       `isPasskey`; new `VaultService.passkeyMetadata`/`VaultPasskeyMetadata` expose
       relying party/username/credential ID (never the private key) via KDBXKit's
       already-built `KDBX.Entry` passkey accessors — no new WebAuthn/CBOR logic yet.
+- [x] ~~Passkey support: write-side metadata (`VaultService.setPasskey`) (#4)~~ — done,
+      see `docs/done/2026-08-26-passkey-write-support.md`. Sets relying party/credential
+      ID/private key PEM/username/user handle on an existing entry via KDBXKit's own
+      `setPasskey*` methods, leaving every other field (title, username, password, URL,
+      notes) untouched — unlike `updateEntry`'s full-replace semantics. Still no
+      WebAuthn/CBOR logic; this only stores whatever key material real signing code
+      will eventually generate.
 - [ ] Passkey support: registration + assertion signing (#4) — highest-risk,
       highest-effort item, deliberately last, needs none of the blocked-Xcode-target
       work #3 does (all of it lands in the *existing* `KeeBridgeProvider` target +
-      `KeeBridgeCore`, both already touched by the read-only slice above). Requires a
-      real CBOR-encoded `attestationObject`, P-256/ES256 assertion signing, write-side
-      passkey support (KDBXKit's `setPasskey*` methods wired into `VaultService`'s own
-      API — not done yet, read-only only so far), and
+      `KeeBridgeCore`, both already touched by the read/write metadata slices above).
+      Requires a real CBOR-encoded `attestationObject` and P-256/ES256 assertion
+      signing (`swift-crypto`, already a dependency), plus
       `ASPasskeyCredentialRequest`/`ASPasskeyRegistrationCredential`/
       `ASPasskeyAssertionCredential` — a materially bigger `AuthenticationServices`
       surface than passwords/OTP. Declare `ProvidesPasskeys: true` in

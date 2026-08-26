@@ -361,6 +361,75 @@ public struct VaultService: Sendable {
         try write(content, unlock: unlock, to: url)
     }
 
+    /// Sets (or overwrites) an existing entry's passkey fields in place —
+    /// relying party, credential ID, and private key PEM are required;
+    /// username/user handle are optional — via KDBXKit's own KeePassXC-
+    /// compatible `setPasskey*` methods (`Entry+Passkey.swift`). Every
+    /// other field on the entry (title, username, password, URL, notes,
+    /// custom fields) is left untouched — this only ever touches the five
+    /// `KPEX_PASSKEY_*` fields, unlike `updateEntry`'s full-replace
+    /// semantics. Throws `.entryNotFound` if no entry with that UUID
+    /// exists anywhere in the tree.
+    public func setPasskey(
+        uuid: String,
+        relyingParty: String,
+        credentialID: Data,
+        privateKeyPEM: String,
+        username: String? = nil,
+        userHandle: Data? = nil,
+        at url: URL,
+        rawKeyData: Data
+    ) throws {
+        try setPasskey(
+            uuid: uuid, relyingParty: relyingParty, credentialID: credentialID, privateKeyPEM: privateKeyPEM,
+            username: username, userHandle: userHandle, at: url, unlock: UnlockData(rawKeyData: rawKeyData)
+        )
+    }
+
+    /// Same as the `rawKeyData:` overload, unlocking from a plaintext
+    /// master password instead — for callers with no cached pre-hash (e.g.
+    /// a CLI prompting via `getpass()`, not backed by Keychain).
+    public func setPasskey(
+        uuid: String,
+        relyingParty: String,
+        credentialID: Data,
+        privateKeyPEM: String,
+        username: String? = nil,
+        userHandle: Data? = nil,
+        at url: URL,
+        masterPassword: String
+    ) throws {
+        try setPasskey(
+            uuid: uuid, relyingParty: relyingParty, credentialID: credentialID, privateKeyPEM: privateKeyPEM,
+            username: username, userHandle: userHandle, at: url, unlock: UnlockData(masterPassword: masterPassword)
+        )
+    }
+
+    private func setPasskey(
+        uuid: String,
+        relyingParty: String,
+        credentialID: Data,
+        privateKeyPEM: String,
+        username: String?,
+        userHandle: Data?,
+        at url: URL,
+        unlock: UnlockData
+    ) throws {
+        var content = try openContent(at: url, unlock: unlock)
+        let found = Self.mutateEntry(in: &content.database.root.group, uuid: uuid) { entry in
+            entry.setPasskeyRelyingParty(relyingParty)
+            entry.setPasskeyCredentialID(credentialID)
+            entry.setPasskeyPrivateKeyPEM(privateKeyPEM)
+            if let username { entry.setPasskeyUsername(username) }
+            if let userHandle { entry.setPasskeyUserHandle(userHandle) }
+            var times = entry.times ?? KDBX.Times()
+            times.lastModificationTime = Date()
+            entry.times = times
+        }
+        guard found else { throw VaultWriteError.entryNotFound(uuid) }
+        try write(content, unlock: unlock, to: url)
+    }
+
     /// Removes an entry entirely (not a move to a recycle bin — v1 doesn't
     /// model one). Throws `.entryNotFound` if the UUID doesn't exist.
     public func deleteEntry(uuid: String, at url: URL, rawKeyData: Data) throws {
