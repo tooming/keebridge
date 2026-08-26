@@ -25,14 +25,25 @@
 
 ## Now / next
 
-- [ ] Credit card autofill via Safari Web Extension (#3) — Apple has no system extension
-      point for third-party card autofill (confirmed: no `ASCreditCardCredential` type,
-      no `ProvidesCreditCards` capability key). Needs a new tech stack for this project
-      (JS/TS content script + background script) and a design for how the extension talks
-      to the native app/extension to get card data. 9 card entries already exist in the
-      vault from the original Proton export, unexposed anywhere in KeeBridge yet. Scope
-      out the native-messaging vs. local-decrypt question before implementation starts —
-      likely too large for one PR; expect this to split into a design/spike item first.
+- [x] ~~Credit card autofill: native-messaging vs. local-decrypt design spike (#3)~~ —
+      done, see `docs/done/2026-08-26-card-autofill-design-spike.md`. Recommendation:
+      local-decrypt via the same "unsandboxed app mirrors into the sandboxed extension's
+      own container" pattern already proven for `KeeBridgeProvider` — no App Group
+      needed (this team's provisioning doesn't reliably grant one anyway, per
+      `README.md`). `browser.runtime.connectNative`/`SFSafariApplication.dispatchMessage`
+      stay available for lock-state signaling, not for shuttling card data itself.
+- [ ] Credit card autofill implementation (#3) — the actual Safari Web Extension target
+      (new JS/TS tech stack: content script + background script +
+      `SafariWebExtensionHandler` native handler), built on the design spike above.
+      Scope for the first PR: extend the app's existing mirroring
+      (`mirrorVaultToExtension`'s sibling) to also mirror card entries into the new
+      extension target's container — that alone is a focused, `KeeBridgeCore`/app-side
+      slice with no new JS yet. The content script + field-detection heuristics +
+      fill UI is genuinely new tech stack work; expect it to need its own follow-up
+      item(s) once the mirroring foundation lands. Still unresolved (needs the
+      maintainer, not the headless executor): the actual field-name convention the 9
+      real card entries use — no conversion script or existing card-handling code in
+      this repo confirms it, and there's no real vault here to inspect.
 - [ ] Passkey support: WebAuthn provider + vault write (#4) — highest-risk, highest-effort
       item, deliberately last. Its dependency (vault write support, #1) is done. Requires
       a real CBOR-encoded `attestationObject`, P-256/ES256 assertion signing, and
