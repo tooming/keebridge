@@ -2,23 +2,41 @@
 //
 // Originally a milestone-1 validation tool (prove KDBXKit can open the real
 // vault.kdbx before any UI/extension code existed); now a small general CLI
-// with three subcommands: `list`, `reveal`, `totp`. Same secret-hygiene
-// discipline throughout: only ever prints a field *value* when the command
-// explicitly asked for that one field (`reveal`/`totp`) — `list` prints only
-// titles/usernames/URLs/UUIDs and custom-field *names*, never values.
+// with six subcommands: `list`, `reveal`, `totp` (read-only), and `create`,
+// `update`, `delete` (write). Same secret-hygiene discipline throughout: only
+// ever prints a field *value* when the command explicitly asked for that one
+// field (`reveal`/`totp`) — `list` prints only titles/usernames/URLs/UUIDs
+// and custom-field *names*, never values; the write subcommands never print
+// a field value back either (just the UUID + a confirmation).
 //
 // Usage:
 //   swift run VaultProbe list <path/to/vault.kdbx>
 //   swift run VaultProbe reveal <path/to/vault.kdbx> <entry-uuid> <field-key>
 //   swift run VaultProbe totp <path/to/vault.kdbx> <entry-uuid>
+//   swift run VaultProbe create <path/to/vault.kdbx> [--title ...] [--username ...] ...
+//   swift run VaultProbe update <path/to/vault.kdbx> <entry-uuid> [--title ...] ...
+//   swift run VaultProbe delete <path/to/vault.kdbx> <entry-uuid> --yes
 //   swift run VaultProbe <path/to/vault.kdbx>            # `list` is the default subcommand
 //
 // Every subcommand also takes `--json`, for piping into `jq`/scripts instead
 // of reading the human-readable text output.
 //
+// `update` reveals the entry's current fields first and only overwrites the
+// ones an option was actually given for (reveal-then-merge) — `updateEntry`
+// itself does a full field replace, not a patch, so blindly forwarding
+// unset options straight through would silently blank out every field the
+// caller didn't mention. `delete` refuses to run without `--yes` — there's
+// no recycle bin (matches `VaultService.deleteEntry`'s own doc comment).
+//
 // The vault path can be omitted from any subcommand if $VAULT_PATH is set
 // instead. Every subcommand reads the master password via `getpass()` (no
 // echo, no shell history, no argv leak) — never pass it as a CLI argument.
+// `create`/`update` take title/username/url/notes as ordinary flags (matching
+// how `list` already treats those as non-secret, and how the KDBX format
+// itself only inner-stream-cipher-protects the Password field) — but the
+// entry's *password* is never a CLI argument. Pass `--set-password` instead
+// and a second `getpass()` prompt asks for it, same no-echo/no-history/no-argv
+// discipline as the vault's own master password.
 
 import ArgumentParser
 import Foundation
@@ -62,6 +80,17 @@ func promptPassword(for url: URL) throws -> String {
     return String(cString: passwordCString)
 }
 
+/// Prompts for a new *entry's* password via `getpass()` — same no-echo/
+/// no-history/no-argv discipline as `promptPassword(for:)`, but a distinct
+/// prompt string so it's never confused with the vault's own master
+/// password. Used by `create --set-password`/`update --set-password`.
+func promptEntryPassword() throws -> String {
+    guard let passwordCString = getpass("New entry password (leave blank for none): ") else {
+        throw ValidationError("Could not read password (no controlling TTY?).")
+    }
+    return String(cString: passwordCString)
+}
+
 /// Encodes `value` as pretty-printed, key-sorted JSON and prints it to
 /// stdout. Sorted keys keep `--json` output byte-stable across runs (no
 /// dictionary-ordering nondeterminism) for anyone diffing or snapshotting it.
@@ -76,7 +105,10 @@ func printJSON(_ value: some Encodable) throws {
 struct VaultProbe: ParsableCommand {
     static let configuration = CommandConfiguration(
         abstract: "Headless KDBX vault inspector, built on KeeBridgeCore — no GUI, no Touch ID.",
-        subcommands: [ListCommand.self, RevealCommand.self, TOTPCommand.self],
+        subcommands: [
+            ListCommand.self, RevealCommand.self, TOTPCommand.self,
+            CreateCommand.self, UpdateCommand.self, DeleteCommand.self,
+        ],
         defaultSubcommand: ListCommand.self
     )
 }
@@ -206,6 +238,128 @@ struct TOTPCommand: ParsableCommand {
             try printJSON(JSONOutput(uuid: entryUUID, code: code))
         } else {
             print(code)
+        }
+    }
+}
+
+struct CreateCommand: ParsableCommand {
+    static let configuration = CommandConfiguration(
+        commandName: "create",
+        abstract: "Create a new entry. The entry's password is prompted separately via --set-password, never a CLI argument."
+    )
+
+    struct JSONOutput: Encodable {
+        let uuid: String
+    }
+
+    @OptionGroup var vault: VaultPathArguments
+    @OptionGroup var output: OutputOptions
+    @Option(name: .long, help: "Entry title.") var title: String = ""
+    @Option(name: .long, help: "Entry username.") var username: String = ""
+    @Option(name: .long, help: "Entry URL.") var url: String = ""
+    @Option(name: .long, help: "Entry notes.") var notes: String = ""
+    @Flag(name: .long, help: "Prompt (via getpass) for the entry's password. Omit to create it with no password.")
+    var setPassword: Bool = false
+
+    mutating func run() throws {
+        let vaultURL = try vault.resolved()
+        let vaultPassword = try promptPassword(for: vaultURL)
+        let entryPassword = setPassword ? try promptEntryPassword() : ""
+
+        let draft = VaultService.EntryDraft(title: title, username: username, password: entryPassword, url: url, notes: notes)
+        let newUUID = try VaultService().createEntry(draft, at: vaultURL, masterPassword: vaultPassword)
+
+        if output.json {
+            try printJSON(JSONOutput(uuid: newUUID))
+        } else {
+            print("Created entry \(newUUID)")
+        }
+    }
+}
+
+struct UpdateCommand: ParsableCommand {
+    static let configuration = CommandConfiguration(
+        commandName: "update",
+        abstract: """
+        Update an existing entry, by UUID. Reveals its current fields first and only \
+        overwrites the ones you pass a flag for — an omitted flag keeps its existing \
+        value (updateEntry itself replaces all fields, so this reveal-then-merge step \
+        is what stops an omitted flag from silently blanking that field). The password \
+        is only touched if you pass --set-password (prompted separately, never a CLI \
+        argument).
+        """
+    )
+
+    struct JSONOutput: Encodable {
+        let uuid: String
+    }
+
+    @OptionGroup var vault: VaultPathArguments
+    @OptionGroup var output: OutputOptions
+    @Argument(help: "Entry UUID, as printed by `list`.")
+    var entryUUID: String
+    @Option(name: .long, help: "New title. Omit to keep the existing title.") var title: String?
+    @Option(name: .long, help: "New username. Omit to keep the existing username.") var username: String?
+    @Option(name: .long, help: "New URL. Omit to keep the existing URL.") var url: String?
+    @Option(name: .long, help: "New notes. Omit to keep the existing notes.") var notes: String?
+    @Flag(name: .long, help: "Prompt (via getpass) for a new password. Omit to keep the existing password.")
+    var setPassword: Bool = false
+
+    mutating func run() throws {
+        let vaultURL = try vault.resolved()
+        let vaultPassword = try promptPassword(for: vaultURL)
+        let service = VaultService()
+
+        let current = try service.revealEntry(uuid: entryUUID, at: vaultURL, masterPassword: vaultPassword)
+        let newPassword = setPassword ? try promptEntryPassword() : current.password
+
+        let merged = VaultService.EntryDraft(
+            title: title ?? current.title,
+            username: username ?? current.username,
+            password: newPassword,
+            url: url ?? current.url,
+            notes: notes ?? current.notes
+        )
+        try service.updateEntry(uuid: entryUUID, applying: merged, at: vaultURL, masterPassword: vaultPassword)
+
+        if output.json {
+            try printJSON(JSONOutput(uuid: entryUUID))
+        } else {
+            print("Updated entry \(entryUUID)")
+        }
+    }
+}
+
+struct DeleteCommand: ParsableCommand {
+    static let configuration = CommandConfiguration(
+        commandName: "delete",
+        abstract: "Delete an entry, by UUID. Irreversible (no recycle bin) — requires --yes."
+    )
+
+    struct JSONOutput: Encodable {
+        let uuid: String
+        let deleted: Bool
+    }
+
+    @OptionGroup var vault: VaultPathArguments
+    @OptionGroup var output: OutputOptions
+    @Argument(help: "Entry UUID, as printed by `list`.")
+    var entryUUID: String
+    @Flag(name: .long, help: "Confirm the deletion. Required — delete refuses to run without it.")
+    var yes: Bool = false
+
+    mutating func run() throws {
+        guard yes else {
+            throw ValidationError("Refusing to delete without --yes (irreversible — there's no recycle bin).")
+        }
+        let vaultURL = try vault.resolved()
+        let vaultPassword = try promptPassword(for: vaultURL)
+        try VaultService().deleteEntry(uuid: entryUUID, at: vaultURL, masterPassword: vaultPassword)
+
+        if output.json {
+            try printJSON(JSONOutput(uuid: entryUUID, deleted: true))
+        } else {
+            print("Deleted entry \(entryUUID)")
         }
     }
 }

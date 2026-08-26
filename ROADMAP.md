@@ -70,11 +70,14 @@
       for the CLI's `update` subcommand: needed so it can reveal-then-merge (only
       overwrite the fields the caller actually specified) instead of blanking every field
       `updateEntry`'s full-replace semantics don't otherwise hear about.
-- [ ] Write subcommands (`create`/`update`/`delete`) for the CLI tool, via the
-      `VaultService` write/reveal methods (all now have `masterPassword` overloads) —
-      higher-value and higher-risk than the read-only subcommands; do once those have
-      proven the subcommand/parsing shape out (they have, see the `list`/`reveal`/`totp`
-      items above).
+- [x] ~~Write subcommands (`create`/`update`/`delete`) for the CLI tool~~ — done, see
+      `docs/done/2026-08-26-vaultprobe-write-subcommands.md`. `update` reveals-then-merges
+      so an omitted flag keeps its existing value; the entry's password is never a CLI
+      argument on either `create` or `update` (`--set-password` triggers a separate
+      `getpass()` prompt instead); `delete` requires `--yes`. This closes out the CLI
+      feasibility spike's (#9) full recommended sequencing — `VaultProbe` now has all six
+      subcommands (`list`/`reveal`/`totp`/`create`/`update`/`delete`), `--json` on every
+      one, and a real `probe-build` CI gate.
 
 ## Needs maintainer/human action (not code)
 
