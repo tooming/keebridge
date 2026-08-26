@@ -39,6 +39,12 @@ let package = Package(
                 // KeePassXC-compatible setPasskey* methods), ahead of
                 // VaultService having any write-side passkey API of its own.
                 .product(name: "KDBXKit", package: "KDBXKit"),
+                // Needed only in PasskeyCryptoTests.swift, to independently
+                // verify a PasskeyCrypto-produced signature against the
+                // matching public key — PasskeyCrypto itself only signs,
+                // it deliberately doesn't expose a verify() (KeeBridge is
+                // the authenticator, not the relying party that verifies).
+                .product(name: "Crypto", package: "swift-crypto"),
             ]
         ),
     ]
