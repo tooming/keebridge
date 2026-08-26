@@ -10,6 +10,10 @@ test: ## Run the KeeBridgeCore Swift package test suite (no signing needed)
 build: ## Unsigned build of the KeeBridge app (embeds KeeBridgeProvider) — the CI-safe gate; a real signed build needs Xcode + the dev cert locally
 	@xcodebuild -project KeeBridge.xcodeproj -scheme KeeBridge -configuration Debug -destination 'platform=macOS' CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO build
 
+.PHONY: probe-build
+probe-build: ## Unsigned build of VaultProbe (SPM executable, incl. its swift-argument-parser subcommands) — not otherwise gated
+	@cd VaultProbe && swift build
+
 .PHONY: routines-check
 routines-check: ## Check routines/routines.yaml matches the last apply (catches edits not synced to the claude.ai trigger)
 	@bash scripts/routines-check.sh
@@ -23,8 +27,9 @@ routines-author-check: ## Fail if an executor-authored (auto/*) change edits rou
 	@bash scripts/routines-author-check.sh
 
 .PHONY: ci
-ci: ## Run every gate this repo has: test + unsigned build + routines drift checks
+ci: ## Run every gate this repo has: test + unsigned build + VaultProbe build + routines drift checks
 	@$(MAKE) test
 	@$(MAKE) build
+	@$(MAKE) probe-build
 	@$(MAKE) routines-check
 	@$(MAKE) routines-author-check
