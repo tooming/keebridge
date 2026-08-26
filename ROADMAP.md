@@ -88,16 +88,22 @@
       `x`/`y`) per RFC 9053 — the exact structure a WebAuthn `attestationObject` embeds
       as its credential public key. Still no `attestationObject`/`authData` envelope
       construction — just this one CBOR map.
-- [ ] Passkey support: `attestationObject`/`authData` construction + registration/
-      assertion request handling (#4) — highest-risk, highest-effort item, deliberately
-      last, needs none of the blocked-Xcode-target work #3 does (all of it lands in the
-      *existing* `KeeBridgeProvider` target + `KeeBridgeCore`, all three already touched
-      by the read/write/crypto slices above). `PasskeyCrypto` now has every primitive
-      (key generation, signing, public-key COSE encoding) this needs — what's left is
-      wiring: the `authData` byte layout (RP ID hash, flags, sign count, AAGUID,
-      credential ID, the COSE_Key bytes above), wrapping it in the CBOR
-      `attestationObject` map (`fmt`/`attStmt`/`authData`), and the actual
-      `ASPasskeyCredentialRequest`/`ASPasskeyRegistrationCredential`/
+- [x] ~~Passkey support: `authenticatorData` construction (`PasskeyCrypto.authenticatorData`) (#4)~~
+      — done, see `docs/done/2026-08-26-passkey-authenticator-data.md`. Builds the WebAuthn
+      §6.1 `authData` byte string (`rpIdHash` ‖ `flags` ‖ `signCount` ‖ optional
+      `attestedCredentialData`) — the byte string that goes *inside* an `attestationObject`,
+      not the CBOR envelope itself. Takes the previously-built COSE_Key bytes as one opaque
+      piece of the (also new) `AttestedCredentialData` struct.
+- [ ] Passkey support: `attestationObject` CBOR envelope + registration/assertion request
+      handling (#4) — highest-risk, highest-effort item, deliberately last, needs none of
+      the blocked-Xcode-target work #3 does (all of it lands in the *existing*
+      `KeeBridgeProvider` target + `KeeBridgeCore`, all three already touched by the
+      read/write/crypto/authData slices above). `PasskeyCrypto` now has every primitive
+      this needs (key generation, signing, public-key COSE encoding, `authenticatorData`)
+      — what's left is wiring: wrapping `authenticatorData`'s output in the CBOR
+      `attestationObject` map (`fmt`/`attStmt`/`authData` — `fmt: "none"`/empty `attStmt`
+      is the simplest valid self-attestation, worth confirming against the spec before
+      coding), and the actual `ASPasskeyCredentialRequest`/`ASPasskeyRegistrationCredential`/
       `ASPasskeyAssertionCredential` implementation — a materially bigger
       `AuthenticationServices` surface than passwords/OTP, and the one piece of this
       that's genuinely hard to verify headlessly (needs a real Safari passkey flow).

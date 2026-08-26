@@ -11,11 +11,12 @@
 // `KPEX_PASSKEY_PRIVATE_KEY_PEM` convention exactly, not the SEC1/"EC
 // PRIVATE KEY" format some other libraries default to).
 //
-// Deliberately does NOT build a full WebAuthn `attestationObject` (the
-// `authData` envelope, `fmt`, `attStmt`) — only the COSE_Key encoding of
-// the credential public key that goes *inside* one. See
-// `docs/done/2026-08-26-passkey-crypto.md` and the ROADMAP entry for #4
-// for what's still open.
+// Deliberately does NOT build the full WebAuthn `attestationObject` CBOR
+// envelope (`fmt`/`attStmt`/`authData`) — only `authenticatorData` (the
+// `authData` byte string that goes *inside* one) and, inside that, the
+// COSE_Key-encoded credential public key. See
+// `docs/done/2026-08-26-passkey-authenticator-data.md` and the ROADMAP
+// entry for #4 for what's still open.
 
 import Crypto
 import Foundation
@@ -24,12 +25,38 @@ import KDBXKit
 public enum PasskeyCrypto {
     public enum PasskeyCryptoError: Error, CustomStringConvertible {
         case invalidPrivateKeyPEM(String)
+        case invalidAttestedCredentialData(String)
 
         public var description: String {
             switch self {
             case .invalidPrivateKeyPEM(let reason):
                 return "Invalid P-256 private key PEM: \(reason)"
+            case .invalidAttestedCredentialData(let reason):
+                return "Invalid attested credential data: \(reason)"
             }
+        }
+    }
+
+    /// The AAGUID, credential ID, and COSE-encoded public key an
+    /// authenticator reports for a newly registered credential — the
+    /// `attestedCredentialData` section of `authenticatorData`, present
+    /// only on registration (never on a later assertion).
+    public struct AttestedCredentialData: Sendable {
+        /// Authenticator Attestation GUID — 16 bytes. All-zero is a
+        /// legitimate, common choice for an authenticator that doesn't
+        /// want to identify its specific model (and macOS silently zeroes
+        /// a third-party credential provider's AAGUID anyway, per the
+        /// passkey design spike's platform-risk finding — see
+        /// `docs/done/2026-08-26-passkey-design-spike.md`).
+        public let aaguid: Data
+        public let credentialID: Data
+        /// CBOR COSE_Key bytes, as produced by `coseEncodedPublicKey`.
+        public let coseEncodedPublicKey: Data
+
+        public init(aaguid: Data, credentialID: Data, coseEncodedPublicKey: Data) {
+            self.aaguid = aaguid
+            self.credentialID = credentialID
+            self.coseEncodedPublicKey = coseEncodedPublicKey
         }
     }
 
@@ -96,6 +123,62 @@ public enum PasskeyCrypto {
     /// (`SecureBytes` overload) for why.
     public static func coseEncodedPublicKey(forPrivateKeyPEM pem: SecureBytes) throws -> Data {
         try pem.withRevealedString { try coseEncodedPublicKey(forPrivateKeyPEM: $0) }
+    }
+
+    /// Builds a WebAuthn `authenticatorData` byte string (spec §6.1):
+    /// `rpIdHash` (SHA-256 of `relyingPartyID`) ‖ `flags` ‖ `signCount` ‖
+    /// `attestedCredentialData` (only present, and only then, when
+    /// `attestedCredentialData` is non-nil — set the AT flag bit
+    /// accordingly). Pass `attestedCredentialData` for a registration
+    /// response, omit it for a later assertion response (which never
+    /// repeats the credential's AAGUID/ID/public key).
+    ///
+    /// - Parameters:
+    ///   - relyingPartyID: e.g. `"example.com"` — hashed, never stored raw.
+    ///   - signCount: the authenticator's signature counter. `0` is a
+    ///     valid, common choice for platform authenticators that don't
+    ///     track per-credential use counts (relying parties are required
+    ///     by spec to tolerate a counter that never increases).
+    ///   - userPresent: sets the UP flag bit. Should be `true` whenever
+    ///     the user actually interacted (e.g. unlocked the vault) to get here.
+    ///   - userVerified: sets the UV flag bit. Should be `true` only when
+    ///     the interaction involved actual user verification (e.g. Touch
+    ///     ID/master-password entry), not mere presence.
+    public static func authenticatorData(
+        relyingPartyID: String,
+        signCount: UInt32,
+        userPresent: Bool = true,
+        userVerified: Bool = true,
+        attestedCredentialData: AttestedCredentialData? = nil
+    ) throws -> Data {
+        var data = Data(SHA256.hash(data: Data(relyingPartyID.utf8)))
+
+        var flags: UInt8 = 0
+        if userPresent { flags |= 0x01 } // bit 0: UP
+        if userVerified { flags |= 0x04 } // bit 2: UV
+        if attestedCredentialData != nil { flags |= 0x40 } // bit 6: AT
+        data.append(flags)
+
+        withUnsafeBytes(of: signCount.bigEndian) { data.append(contentsOf: $0) }
+
+        if let acd = attestedCredentialData {
+            guard acd.aaguid.count == 16 else {
+                throw PasskeyCryptoError.invalidAttestedCredentialData(
+                    "AAGUID must be exactly 16 bytes, got \(acd.aaguid.count)"
+                )
+            }
+            guard acd.credentialID.count <= Int(UInt16.max) else {
+                throw PasskeyCryptoError.invalidAttestedCredentialData(
+                    "credential ID too long (\(acd.credentialID.count) bytes, max \(UInt16.max))"
+                )
+            }
+            data.append(acd.aaguid)
+            withUnsafeBytes(of: UInt16(acd.credentialID.count).bigEndian) { data.append(contentsOf: $0) }
+            data.append(acd.credentialID)
+            data.append(acd.coseEncodedPublicKey) // CBOR is self-delimiting; no length prefix needed
+        }
+
+        return data
     }
 
     private static func privateKey(fromPEM pem: String) throws -> P256.Signing.PrivateKey {
