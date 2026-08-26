@@ -1,5 +1,19 @@
 # Passkey support: storage convention + platform-risk design spike
 
+> **Correction (2026-08-26, same day, next cycle):** the storage-convention finding
+> below — a `webauthn.pem` file attachment + password-field username, from general web
+> search about KeePassXC 2.7.7 — turned out to be the *wrong* specific convention. This
+> project's own `KDBXKit` dependency (already pinned in `KeeBridgeCore/Package.swift`)
+> has first-class passkey support built in at `Sources/KDBXKit/KDBX/Entry+Passkey.swift`,
+> using a **different**, more specific KeePassXC-compatible convention: five custom
+> string fields (`KPEX_PASSKEY_RELYING_PARTY`, `KPEX_PASSKEY_CREDENTIAL_ID`,
+> `KPEX_PASSKEY_PRIVATE_KEY_PEM`, `KPEX_PASSKEY_USERNAME`, `KPEX_PASSKEY_USER_HANDLE`),
+> not a file attachment. Read the KDBXKit source directly (not general web search) before
+> trusting this file's storage-format claims — see
+> `docs/done/2026-08-26-passkey-metadata-reading.md` for the corrected finding and what
+> was built on top of it. The platform-risk (AAGUID) research below is unaffected and
+> still stands.
+
 Answers two of the open design questions issue #4 itself listed before any passkey
 code gets written: which storage convention to use for new passkeys (for KeePassXC
 interop), and a closer look at the AAGUID-zeroing platform risk the issue flagged.
@@ -28,6 +42,11 @@ here: unlike card autofill, it needs no new Xcode target at all — all of it la
 and `KeeBridgeCore`, both places this run has safely shipped changes to all day.
 
 ## What was confirmed
+
+**⚠️ Superseded — see the correction banner at the top of this file.** The specific
+mechanics below (PEM attachment, password-field username) are wrong; the *principle*
+(follow KeePassXC's convention, don't invent a new one) still holds, just with a
+different concrete field layout — see `docs/done/2026-08-26-passkey-metadata-reading.md`.
 
 **KeePassXC's own passkey storage convention** (the interop question issue #4's scope
 notes explicitly asked to check before inventing a KeeBridge-only scheme): as of

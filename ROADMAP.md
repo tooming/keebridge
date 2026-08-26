@@ -52,26 +52,35 @@
       `KeeBridgeCore`/app-side slice with no new JS yet. Still unresolved (needs the
       maintainer): the actual field-name convention the 9 real card entries use.
 - [x] ~~Passkey support: storage convention + platform-risk design spike (#4)~~ — done,
-      see `docs/done/2026-08-26-passkey-design-spike.md`. Confirmed KeePassXC 2.7.7+'s
-      own passkey storage convention (a `webauthn.pem` file attachment + the WebAuthn
-      username in the password field) — new passkeys KeeBridge creates should follow
-      this, not invent a third format, for KeePassXC interop. Confirmed the AAGUID-
-      zeroing platform risk is real and current (Developer Forums thread 814547),
-      possibly an intentional Apple privacy choice rather than a third-party-specific
-      bug — proceed anyway, just document the limitation plainly.
-- [ ] Passkey support: implementation (#4) — highest-risk, highest-effort item,
-      deliberately last, needs none of the blocked-Xcode-target work #3 does (all of it
-      lands in the *existing* `KeeBridgeProvider` target + `KeeBridgeCore`). Requires a
-      real CBOR-encoded `attestationObject`, P-256/ES256 assertion signing, and
+      see `docs/done/2026-08-26-passkey-design-spike.md`, **corrected next cycle**: the
+      storage-convention finding there (a `webauthn.pem` file attachment) was wrong —
+      this project's own `KDBXKit` dependency already models KeePassXC's *actual*
+      convention (five `KPEX_PASSKEY_*` custom string fields, source at
+      `Sources/KDBXKit/KDBX/Entry+Passkey.swift`), see
+      `docs/done/2026-08-26-passkey-metadata-reading.md`. The AAGUID platform-risk
+      finding (Developer Forums thread 814547, possibly an intentional Apple privacy
+      choice rather than a third-party-specific bug) is unaffected and still stands.
+- [x] ~~Passkey support: read-only metadata (#4)~~ — done, see
+      `docs/done/2026-08-26-passkey-metadata-reading.md`. `VaultLoginEntry` gained
+      `isPasskey`; new `VaultService.passkeyMetadata`/`VaultPasskeyMetadata` expose
+      relying party/username/credential ID (never the private key) via KDBXKit's
+      already-built `KDBX.Entry` passkey accessors — no new WebAuthn/CBOR logic yet.
+- [ ] Passkey support: registration + assertion signing (#4) — highest-risk,
+      highest-effort item, deliberately last, needs none of the blocked-Xcode-target
+      work #3 does (all of it lands in the *existing* `KeeBridgeProvider` target +
+      `KeeBridgeCore`, both already touched by the read-only slice above). Requires a
+      real CBOR-encoded `attestationObject`, P-256/ES256 assertion signing, write-side
+      passkey support (KDBXKit's `setPasskey*` methods wired into `VaultService`'s own
+      API — not done yet, read-only only so far), and
       `ASPasskeyCredentialRequest`/`ASPasskeyRegistrationCredential`/
       `ASPasskeyAssertionCredential` — a materially bigger `AuthenticationServices`
-      surface than passwords/OTP; a reasonable first slice is just declaring
-      `ProvidesPasskeys: true` in the already-checked-in `KeeBridgeProvider/Info.plist`
-      (a plain content edit, no `xcodegen` needed). The 9 Proton-Pass-carried passkeys
-      stay informational-only per the design spike's recommendation — reconstructing
-      them (proprietary double-nested MessagePack) is a separate, optional, riskier
-      follow-up, not a blocker for shipping new-passkey creation. Expect this to need
-      its own groomed sub-items rather than one PR.
+      surface than passwords/OTP. Declare `ProvidesPasskeys: true` in
+      `KeeBridgeProvider/Info.plist` only once this request-handling actually exists —
+      declaring the capability first would advertise something the extension can't yet
+      fulfill. The 9 Proton-Pass-carried passkeys stay informational-only per the design
+      spike's recommendation — reconstructing them (separate proprietary double-nested
+      MessagePack format) is optional, riskier follow-up, not a blocker. Expect this to
+      need its own groomed sub-items rather than one PR.
 - [ ] QR code scanning for adding a passkey (#7) — some sites offer a QR code to add a
       passkey; KeeBridge should support scanning it. Depends on passkey support (#4)
       existing first — not buildable until that lands.

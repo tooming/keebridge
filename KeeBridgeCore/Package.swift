@@ -32,7 +32,14 @@ let package = Package(
         ),
         .testTarget(
             name: "KeeBridgeCoreTests",
-            dependencies: ["KeeBridgeCore"]
+            dependencies: [
+                "KeeBridgeCore",
+                // Needed only to construct a passkey-bearing KDBX.Entry
+                // directly in PasskeyTests.swift (via KDBXKit's own
+                // KeePassXC-compatible setPasskey* methods), ahead of
+                // VaultService having any write-side passkey API of its own.
+                .product(name: "KDBXKit", package: "KDBXKit"),
+            ]
         ),
     ]
 )
