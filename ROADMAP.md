@@ -65,10 +65,16 @@
       `rawKeyData`-based overloads existed (fine for the app, which has a cached
       pre-hash; not fine for a CLI prompting via `getpass()` with no Keychain). `create`
       already had both forms; `update`/`delete` now do too.
+- [x] ~~Add a `masterPassword`-based `revealEntry` overload to `VaultService`~~ — done,
+      see `docs/done/2026-08-26-vaultservice-reveal-overload.md`. Second foundation piece
+      for the CLI's `update` subcommand: needed so it can reveal-then-merge (only
+      overwrite the fields the caller actually specified) instead of blanking every field
+      `updateEntry`'s full-replace semantics don't otherwise hear about.
 - [ ] Write subcommands (`create`/`update`/`delete`) for the CLI tool, via the
-      `VaultService` write methods (all now have `masterPassword` overloads) — higher-value
-      and higher-risk than the read-only subcommands; do once those have proven the
-      subcommand/parsing shape out (they have, see the `list`/`reveal`/`totp` items above).
+      `VaultService` write/reveal methods (all now have `masterPassword` overloads) —
+      higher-value and higher-risk than the read-only subcommands; do once those have
+      proven the subcommand/parsing shape out (they have, see the `list`/`reveal`/`totp`
+      items above).
 
 ## Needs maintainer/human action (not code)
 

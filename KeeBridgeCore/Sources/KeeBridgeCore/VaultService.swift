@@ -352,6 +352,20 @@ public struct VaultService: Sendable {
         return draft
     }
 
+    /// Same as `revealEntry(uuid:at:rawKeyData:)`, unlocking from a plaintext
+    /// master password instead — for callers with no cached pre-hash (e.g. a
+    /// CLI prompting via `getpass()`, not backed by Keychain). Needed so a
+    /// CLI `update` command can reveal-then-merge (only overwrite the fields
+    /// the caller actually specified) instead of blanking out every field
+    /// `updateEntry`'s full-replace semantics don't hear about.
+    public func revealEntry(uuid: String, at url: URL, masterPassword: String) throws -> EntryDraft {
+        let content = try openVault(at: url, masterPassword: masterPassword)
+        guard let draft = revealEntry(in: content, uuid: uuid) else {
+            throw VaultWriteError.entryNotFound(uuid)
+        }
+        return draft
+    }
+
     // MARK: - Write-side tree helpers
 
     /// Builds the standard five-field `strings` array for an entry.
