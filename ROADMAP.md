@@ -72,13 +72,23 @@
       notes) untouched — unlike `updateEntry`'s full-replace semantics. Still no
       WebAuthn/CBOR logic; this only stores whatever key material real signing code
       will eventually generate.
+- [x] ~~Passkey support: P-256 key generation + ECDSA signing (`PasskeyCrypto`) (#4)~~ —
+      done, see `docs/done/2026-08-26-passkey-crypto.md`. `PasskeyCrypto.generatePrivateKeyPEM()`/
+      `.sign(_:withPrivateKeyPEM:)`, built entirely on `swift-crypto`'s `P256.Signing` —
+      no hand-rolled crypto. Confirmed (not assumed) `P256.Signing.PrivateKey.pemRepresentation`
+      emits PKCS#8 PEM, matching what `VaultService.setPasskey`/KDBXKit's
+      `KPEX_PASSKEY_PRIVATE_KEY_PEM` convention expects. Still no CBOR/COSE/
+      `attestationObject` construction — just the key-gen/signing primitives real
+      registration/assertion code will call.
 - [ ] Passkey support: registration + assertion signing (#4) — highest-risk,
       highest-effort item, deliberately last, needs none of the blocked-Xcode-target
       work #3 does (all of it lands in the *existing* `KeeBridgeProvider` target +
-      `KeeBridgeCore`, both already touched by the read/write metadata slices above).
-      Requires a real CBOR-encoded `attestationObject` and P-256/ES256 assertion
-      signing (`swift-crypto`, already a dependency), plus
-      `ASPasskeyCredentialRequest`/`ASPasskeyRegistrationCredential`/
+      `KeeBridgeCore`, both already touched by the read/write/crypto slices above).
+      Requires a real CBOR-encoded `attestationObject` (COSE_Key encoding for the public
+      key — `PasskeyCrypto` doesn't extract/encode the public key yet, only sign; the
+      `rawRepresentation`/`x963Representation` distinction on `P256.Signing.PublicKey`
+      needs confirming against the WebAuthn COSE_Key spec before writing that, not
+      guessed at), plus `ASPasskeyCredentialRequest`/`ASPasskeyRegistrationCredential`/
       `ASPasskeyAssertionCredential` — a materially bigger `AuthenticationServices`
       surface than passwords/OTP. Declare `ProvidesPasskeys: true` in
       `KeeBridgeProvider/Info.plist` only once this request-handling actually exists —
