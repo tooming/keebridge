@@ -89,6 +89,18 @@ STEP 6 — Deliver. When `make ci` is green:
      is an autonomous scheduled run + any "still needs a human eyeball" caveat from STEP
      4's HEADLESS ONLY rule). If the item references a GitHub issue, add `Closes #NNN`.
      Self-merge happens in STEP 7 after self-review, not here.
+  5. MANUAL FOLLOW-UP STEPS GET THEIR OWN ISSUE — never leave one only in the PR body
+     (the maintainer does not read every PR). If the delivered change needs a human to
+     run something by hand after merge — a schema/migration apply against a real store,
+     a secret/signing-key rotation, a deploy or infra/config change, a one-off backfill,
+     anything `make ci` does not exercise — also `gh issue create --label manual-step`
+     (create the label if missing: `gh label create manual-step --color fbca04
+     --description "Mergeable PR carries a manual step a human must run (migration,
+     secret, infra)" 2>/dev/null || true`), title `[Manual step] <one-line>`, body = the
+     exact command(s) + why + a "done when" checklist, then `gh pr comment <num>` with a
+     one-liner linking the issue. Distinct from STEP 6b's `[Action needed]` escalation
+     (that means "the executor is blocked"); this means "the work shipped, a human has a
+     follow-up".
 
 STEP 6b — Lane empty? Don't waste the run. If ROADMAP.md's "Now / next" lane has no
 buildable item: re-survey the same sources as STEP 1a (`gh issue list --state open`,
