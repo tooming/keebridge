@@ -94,26 +94,36 @@
       `attestedCredentialData`) — the byte string that goes *inside* an `attestationObject`,
       not the CBOR envelope itself. Takes the previously-built COSE_Key bytes as one opaque
       piece of the (also new) `AttestedCredentialData` struct.
-- [ ] Passkey support: `attestationObject` CBOR envelope + registration/assertion request
-      handling (#4) — highest-risk, highest-effort item, deliberately last, needs none of
-      the blocked-Xcode-target work #3 does (all of it lands in the *existing*
-      `KeeBridgeProvider` target + `KeeBridgeCore`, all three already touched by the
-      read/write/crypto/authData slices above). `PasskeyCrypto` now has every primitive
-      this needs (key generation, signing, public-key COSE encoding, `authenticatorData`)
-      — what's left is wiring: wrapping `authenticatorData`'s output in the CBOR
-      `attestationObject` map (`fmt`/`attStmt`/`authData` — `fmt: "none"`/empty `attStmt`
-      is the simplest valid self-attestation, worth confirming against the spec before
-      coding), and the actual `ASPasskeyCredentialRequest`/`ASPasskeyRegistrationCredential`/
-      `ASPasskeyAssertionCredential` implementation — a materially bigger
-      `AuthenticationServices` surface than passwords/OTP, and the one piece of this
-      that's genuinely hard to verify headlessly (needs a real Safari passkey flow).
-      Declare `ProvidesPasskeys: true` in `KeeBridgeProvider/Info.plist` only once this
+- [x] ~~Passkey support: `attestationObject` CBOR envelope construction
+      (`PasskeyCrypto.attestationObject`) (#4)~~ — done, see
+      `docs/done/2026-08-31-passkey-attestation-object.md`. Wraps `authenticatorData`'s
+      output in the 3-entry `{fmt, attStmt, authData}` CBOR map per WebAuthn §6.5.4, using
+      `fmt: "none"`/empty `attStmt` (the simplest valid self-attestation — KeeBridge has no
+      hardware-attestation chain to prove). The minimal CBOR encoder gained text-string
+      (major type 3) support and a general length-prefix helper (byte strings could
+      already exceed the old 255-byte-only cap once `attestedCredentialData` is included).
+      Groomed off this item's original bullet, which was flagged as needing its own
+      sub-items rather than one PR — see the follow-up bullet immediately below for the
+      remaining, genuinely-hard-to-verify-headlessly half.
+- [ ] Passkey support: `ASPasskeyCredentialRequest`/`ASPasskeyRegistrationCredential`/
+      `ASPasskeyAssertionCredential` registration + assertion request handling in
+      `KeeBridgeProvider` (#4) — the remaining half of the original `attestationObject`
+      item, split off once the CBOR envelope construction above landed. `PasskeyCrypto`
+      now has every primitive this needs (key generation, signing, public-key COSE
+      encoding, `authenticatorData`, `attestationObject`) — what's left is wiring:
+      `CredentialProviderViewController` handling an incoming
+      `ASPasskeyCredentialRequest`, generating/reading the relevant entry's key material
+      via `VaultService.passkeyMetadata`/`setPasskey`, and returning an
+      `ASPasskeyRegistrationCredential`/`ASPasskeyAssertionCredential` built from
+      `PasskeyCrypto`'s output — a materially bigger `AuthenticationServices` surface than
+      passwords/OTP, and the one piece of this that's genuinely hard to verify headlessly
+      (needs a real Safari passkey flow to be fully confident). Declare
+      `ProvidesPasskeys: true` in `KeeBridgeProvider/Info.plist` only once this
       request-handling actually exists — declaring the capability first would advertise
       something the extension can't yet fulfill. The 9 Proton-Pass-carried passkeys stay
       informational-only per the design spike's recommendation — reconstructing them
       (separate proprietary double-nested MessagePack format) is optional, riskier
-      follow-up, not a blocker. Expect this to need its own groomed sub-items rather than
-      one PR.
+      follow-up, not a blocker.
 - [ ] QR code scanning for adding a passkey (#7) — some sites offer a QR code to add a
       passkey; KeeBridge should support scanning it. Depends on passkey support (#4)
       existing first — not buildable until that lands.

@@ -200,3 +200,56 @@ import Testing
         )
     }
 }
+
+// MARK: - attestationObject
+//
+// Expected layout per WebAuthn spec §6.5.4: a 3-entry CBOR map
+// `{fmt: "none", attStmt: {}, authData: <bytes>}` — asserted byte-by-byte
+// against that fixed structure, same style as coseEncodedPublicKey's test
+// above.
+
+@Test func attestationObjectProducesTheExpectedCBORByteLayoutForShortAuthData() {
+    let authData = Data([0x01, 0x02, 0x03])
+
+    let object = PasskeyCrypto.attestationObject(authenticatorData: authData)
+
+    var expected = Data([0xA3]) // map, 3 entries
+    expected.append(contentsOf: [0x63]); expected.append(Data("fmt".utf8)) // "fmt" (tstr, len 3)
+    expected.append(contentsOf: [0x64]); expected.append(Data("none".utf8)) // "none" (tstr, len 4)
+    expected.append(contentsOf: [0x67]); expected.append(Data("attStmt".utf8)) // "attStmt" (tstr, len 7)
+    expected.append(contentsOf: [0xA0]) // {} — empty map, no attestation statement
+    expected.append(contentsOf: [0x68]); expected.append(Data("authData".utf8)) // "authData" (tstr, len 8)
+    expected.append(contentsOf: [0x43]); expected.append(authData) // bstr(3)
+
+    #expect(object == expected)
+}
+
+@Test func attestationObjectUsesThe1ByteLengthPrefixFormForAuthDataOver23Bytes() throws {
+    // A realistic registration authenticatorData (with attestedCredentialData)
+    // is always > 23 bytes — confirms the byte-string length prefix isn't
+    // just the 0–23 immediate form.
+    let pem = PasskeyCrypto.generatePrivateKeyPEM()
+    let coseKey = try PasskeyCrypto.coseEncodedPublicKey(forPrivateKeyPEM: pem)
+    let authData = try PasskeyCrypto.authenticatorData(
+        relyingPartyID: "example.com",
+        signCount: 0,
+        attestedCredentialData: .init(
+            aaguid: Data(repeating: 0, count: 16),
+            credentialID: Data([0xDE, 0xAD, 0xBE, 0xEF]),
+            coseEncodedPublicKey: coseKey
+        )
+    )
+    #expect(authData.count > 23)
+
+    let object = PasskeyCrypto.attestationObject(authenticatorData: authData)
+
+    // authData is the last field — its value is the CBOR-encoded byte
+    // string forming the object's tail: 1-byte-length head (0x58, count) + bytes.
+    let tail = Data([0x58, UInt8(authData.count)]) + authData
+    #expect(object.suffix(tail.count) == tail)
+}
+
+@Test func attestationObjectIsDeterministicForTheSameInput() {
+    let authData = Data([0xAA, 0xBB])
+    #expect(PasskeyCrypto.attestationObject(authenticatorData: authData) == PasskeyCrypto.attestationObject(authenticatorData: authData))
+}
