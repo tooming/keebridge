@@ -264,6 +264,21 @@ public struct VaultService: Sendable {
         passkeyMetadata(in: try openVault(at: url, rawKeyData: rawKeyData), entryUUID: entryUUID)
     }
 
+    /// Reveals a passkey-bearing entry's private key PEM (PKCS#8) — the one
+    /// secret `passkeyMetadata` deliberately leaves out (see its doc
+    /// comment). Needed only at actual WebAuthn assertion/registration
+    /// time, to hand to `PasskeyCrypto.sign`. Same reveal-on-demand
+    /// discipline as `revealField`: materializes the secret into a plain
+    /// `String` only for the caller's immediate use, from an already-open
+    /// vault, pure in-memory (no I/O, no KDF). `nil` if no entry with that
+    /// UUID exists, it isn't a passkey, or it has no private key stored.
+    public func revealPasskeyPrivateKeyPEM(in content: KDBXContent, entryUUID: String) -> String? {
+        guard let entry = Self.findEntry(in: content.database.root.group, uuid: entryUUID),
+              entry.isPasskey
+        else { return nil }
+        return entry.passkeyPrivateKeyPEM?.withRevealedString { $0 }
+    }
+
     // MARK: - Writing (v2 — createVault/createEntry/updateEntry/deleteEntry)
 
     /// Fields for creating or editing a login-style entry. Deliberately the

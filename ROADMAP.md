@@ -105,25 +105,41 @@
       Groomed off this item's original bullet, which was flagged as needing its own
       sub-items rather than one PR — see the follow-up bullet immediately below for the
       remaining, genuinely-hard-to-verify-headlessly half.
-- [ ] Passkey support: `ASPasskeyCredentialRequest`/`ASPasskeyRegistrationCredential`/
-      `ASPasskeyAssertionCredential` registration + assertion request handling in
-      `KeeBridgeProvider` (#4) — the remaining half of the original `attestationObject`
-      item, split off once the CBOR envelope construction above landed. `PasskeyCrypto`
-      now has every primitive this needs (key generation, signing, public-key COSE
-      encoding, `authenticatorData`, `attestationObject`) — what's left is wiring:
-      `CredentialProviderViewController` handling an incoming
-      `ASPasskeyCredentialRequest`, generating/reading the relevant entry's key material
-      via `VaultService.passkeyMetadata`/`setPasskey`, and returning an
-      `ASPasskeyRegistrationCredential`/`ASPasskeyAssertionCredential` built from
-      `PasskeyCrypto`'s output — a materially bigger `AuthenticationServices` surface than
-      passwords/OTP, and the one piece of this that's genuinely hard to verify headlessly
-      (needs a real Safari passkey flow to be fully confident). Declare
-      `ProvidesPasskeys: true` in `KeeBridgeProvider/Info.plist` only once this
-      request-handling actually exists — declaring the capability first would advertise
-      something the extension can't yet fulfill. The 9 Proton-Pass-carried passkeys stay
-      informational-only per the design spike's recommendation — reconstructing them
-      (separate proprietary double-nested MessagePack format) is optional, riskier
-      follow-up, not a blocker.
+- [x] ~~Passkey support: `ASPasskeyCredentialRequest` assertion (sign-in) handling in
+      `KeeBridgeProvider`, against an EXISTING stored passkey (#4)~~ — done, see
+      `docs/done/2026-08-31-passkey-assertion-wiring.md`. `CredentialProviderViewController.completeCredential`
+      now branches on `credentialRequest as? ASPasskeyCredentialRequest`, reveals the
+      matching entry's private key via the new `VaultService.revealPasskeyPrivateKeyPEM`,
+      builds `authenticatorData` (no `attestedCredentialData` — assertion-only), signs
+      `authenticatorData ‖ clientDataHash` with `PasskeyCrypto.sign`, and responds via
+      `extensionContext.completeAssertionRequest(using:)` with an
+      `ASPasskeyAssertionCredential`. Reuses the exact same
+      `prepareInterfaceToProvideCredential`/`showUnlockOrProceed` path passwords/OTP
+      already go through — no new override needed for assertion specifically (confirmed
+      against Apple's own DocC JSON API, not guessed). Still inert in a real system flow:
+      see the follow-up bullet immediately below for why, and for the remaining,
+      genuinely-hard-to-verify-headlessly half.
+- [ ] Passkey support: registration (creating a NEW passkey from KeeBridge) —
+      `prepareInterfaceForPasskeyRegistration`/`ASPasskeyRegistrationCredential` in
+      `KeeBridgeProvider`, plus declaring `ProvidesPasskeys: true` in
+      `KeeBridgeProvider/Info.plist` (#4) — split off once assertion (sign-in against an
+      existing passkey, above) landed. `PasskeyCrypto` already has every primitive this
+      needs (key generation, signing, public-key COSE encoding, `authenticatorData`,
+      `attestationObject`); `VaultService.setPasskey` already exists for the write side.
+      What's left: a new `prepareInterfaceForPasskeyRegistration(with:)` override,
+      generating a fresh key via `PasskeyCrypto.generatePrivateKeyPEM()`, storing it via
+      `setPasskey` (as a NEW entry, or on an existing one — needs a UI decision, since
+      registration has no `recordIdentifier` to key off yet, unlike assertion), and
+      returning an `ASPasskeyRegistrationCredential` built from `PasskeyCrypto.attestationObject`.
+      Declare `ProvidesPasskeys: true` only once THIS lands too — until then, the assertion
+      wiring above stays inert (the system never routes a passkey request to an extension
+      that hasn't declared the capability), which is deliberate: declaring it before
+      registration exists would advertise a capability this extension can't yet fully
+      honor. This is also the one piece of the whole passkey effort that's genuinely hard
+      to verify headlessly (needs a real Safari passkey registration flow). The 9
+      Proton-Pass-carried passkeys stay informational-only per the design spike's
+      recommendation — reconstructing them (separate proprietary double-nested MessagePack
+      format) is optional, riskier follow-up, not a blocker.
 - [ ] QR code scanning for adding a passkey (#7) — some sites offer a QR code to add a
       passkey; KeeBridge should support scanning it. Depends on passkey support (#4)
       existing first — not buildable until that lands.
