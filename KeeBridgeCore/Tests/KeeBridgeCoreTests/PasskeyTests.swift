@@ -110,6 +110,40 @@ private func makeVaultWithPasskeyEntry(at url: URL) throws -> String {
     #expect(metadata == nil)
 }
 
+@Test func revealPasskeyPrivateKeyPEMReturnsTheStoredPEM() throws {
+    let service = VaultService()
+    let url = tempVaultURL()
+    defer { try? FileManager.default.removeItem(at: url) }
+    let passkeyUUID = try makeVaultWithPasskeyEntry(at: url)
+
+    let content = try service.openVault(at: url, masterPassword: testPassword)
+    let pem = service.revealPasskeyPrivateKeyPEM(in: content, entryUUID: passkeyUUID)
+    #expect(pem == "-----BEGIN PRIVATE KEY-----\nMOCK-NOT-A-REAL-KEY\n-----END PRIVATE KEY-----")
+}
+
+@Test func revealPasskeyPrivateKeyPEMReturnsNilForNonPasskeyEntry() throws {
+    let service = VaultService()
+    let url = tempVaultURL()
+    defer { try? FileManager.default.removeItem(at: url) }
+    let passkeyUUID = try makeVaultWithPasskeyEntry(at: url)
+
+    let content = try service.openVault(at: url, masterPassword: testPassword)
+    let entries = service.listEntries(in: content)
+    let plainUUID = try #require(entries.first { $0.uuid != passkeyUUID }?.uuid)
+
+    #expect(service.revealPasskeyPrivateKeyPEM(in: content, entryUUID: plainUUID) == nil)
+}
+
+@Test func revealPasskeyPrivateKeyPEMReturnsNilForUnknownUUID() throws {
+    let service = VaultService()
+    let url = tempVaultURL()
+    defer { try? FileManager.default.removeItem(at: url) }
+    _ = try makeVaultWithPasskeyEntry(at: url)
+
+    let content = try service.openVault(at: url, masterPassword: testPassword)
+    #expect(service.revealPasskeyPrivateKeyPEM(in: content, entryUUID: UUID().uuidString) == nil)
+}
+
 @Test func setPasskeyAddsPasskeyFieldsWithoutTouchingOtherFields() throws {
     let service = VaultService()
     let url = tempVaultURL()

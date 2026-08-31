@@ -3,6 +3,16 @@
 //
 // v1 scope: passwords + TOTP. Read-only against the vault — never writes.
 //
+// Passkey assertion (v4): completeCredential now also handles an incoming
+// ASPasskeyCredentialRequest by signing with PasskeyCrypto against an
+// existing entry's stored key — see completePasskeyAssertion below.
+// Registration (creating a NEW passkey from this extension) is NOT wired
+// yet, and `ProvidesPasskeys` is deliberately NOT declared in Info.plist
+// until it is — see the ROADMAP entry for #4. Until that capability flag
+// flips, the system never actually routes a passkey request here, so this
+// path is inert, forward-compatible groundwork, same as every other
+// passkey primitive landed so far.
+//
 // This extension is fully independent from the KeeBridge app — it has its
 // own local (unshared) Keychain cache and its own unlock prompt the first
 // time it's used, rather than relying on the app's cached key. See
@@ -265,6 +275,19 @@ final class CredentialProviderViewController: ASCredentialProviderViewController
         extensionContext.completeOneTimeCodeRequest(using: credential, completionHandler: nil)
     }
 
+    @available(macOS 14.0, *)
+    private func respondComplete(with credential: ASPasskeyAssertionCredential) {
+        guard !hasResponded else {
+            log.error("respondComplete(passkey assertion) called AFTER already responded — ignored")
+            return
+        }
+        hasResponded = true
+        watchdogItem?.cancel()
+        isWorking = false
+        log.notice("✓ completeAssertionRequest(using:) — passkey assertion")
+        extensionContext.completeAssertionRequest(using: credential, completionHandler: nil)
+    }
+
     private func respondCancel(_ code: ASExtensionError.Code) {
         guard !hasResponded else {
             log.error("respondCancel(\(code.rawValue)) called AFTER already responded — ignored")
@@ -446,6 +469,12 @@ final class CredentialProviderViewController: ASCredentialProviderViewController
 
     private func completeCredential(for credentialRequest: ASCredentialRequest, content: KDBXContent) {
         log.notice("completeCredential: recordIdentifier=\(credentialRequest.credentialIdentity.recordIdentifier ?? "nil", privacy: .public), isOTP=\(credentialRequest.credentialIdentity is ASOneTimeCodeCredentialIdentity)")
+
+        if #available(macOS 14.0, *), let passkeyRequest = credentialRequest as? ASPasskeyCredentialRequest {
+            completePasskeyAssertion(for: passkeyRequest, content: content)
+            return
+        }
+
         guard let recordIdentifier = credentialRequest.credentialIdentity.recordIdentifier else {
             log.error("completeCredential: missing recordIdentifier — cancelling")
             respondCancel(.credentialIdentityNotFound)
@@ -459,6 +488,54 @@ final class CredentialProviderViewController: ASCredentialProviderViewController
                 content: content, recordIdentifier: recordIdentifier,
                 username: credentialRequest.credentialIdentity.user
             )
+        }
+    }
+
+    // MARK: - Passkey assertion (v4 — signing in with an EXISTING stored passkey)
+    //
+    // Registration (creating a new passkey) is not handled here — see the
+    // header comment. This only ever reads (`revealPasskeyPrivateKeyPEM`),
+    // never writes.
+
+    @available(macOS 14.0, *)
+    private func completePasskeyAssertion(for request: ASPasskeyCredentialRequest, content: KDBXContent) {
+        guard let identity = request.credentialIdentity as? ASPasskeyCredentialIdentity,
+              let recordIdentifier = identity.recordIdentifier
+        else {
+            log.error("completePasskeyAssertion: missing passkey credential identity/recordIdentifier — cancelling")
+            respondCancel(.credentialIdentityNotFound)
+            return
+        }
+        guard let privateKeyPEM = vaultService.revealPasskeyPrivateKeyPEM(in: content, entryUUID: recordIdentifier) else {
+            log.error("completePasskeyAssertion: no stored private key for this entry — cancelling")
+            respondCancel(.credentialIdentityNotFound)
+            return
+        }
+
+        do {
+            // No attestedCredentialData on an assertion (spec §6.1) — that's
+            // registration-only. signCount 0: see authenticatorData's own
+            // doc comment for why that's a legitimate, common choice.
+            let authenticatorData = try PasskeyCrypto.authenticatorData(
+                relyingPartyID: identity.relyingPartyIdentifier, signCount: 0
+            )
+            // WebAuthn spec §6.3.3: the signed message is
+            // authenticatorData ‖ clientDataHash.
+            let signature = try PasskeyCrypto.sign(
+                authenticatorData + request.clientDataHash, withPrivateKeyPEM: privateKeyPEM
+            )
+            log.notice("completePasskeyAssertion: signed — relyingParty=\(identity.relyingPartyIdentifier, privacy: .public)")
+            respondComplete(with: ASPasskeyAssertionCredential(
+                userHandle: identity.userHandle,
+                relyingParty: identity.relyingPartyIdentifier,
+                signature: signature,
+                clientDataHash: request.clientDataHash,
+                authenticatorData: authenticatorData,
+                credentialID: identity.credentialID
+            ))
+        } catch {
+            log.error("completePasskeyAssertion: threw: \(String(describing: error))")
+            respondCancel(withError: error)
         }
     }
 
