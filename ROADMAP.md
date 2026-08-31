@@ -119,27 +119,56 @@
       against Apple's own DocC JSON API, not guessed). Still inert in a real system flow:
       see the follow-up bullet immediately below for why, and for the remaining,
       genuinely-hard-to-verify-headlessly half.
-- [ ] Passkey support: registration (creating a NEW passkey from KeeBridge) —
-      `prepareInterfaceForPasskeyRegistration`/`ASPasskeyRegistrationCredential` in
-      `KeeBridgeProvider`, plus declaring `ProvidesPasskeys: true` in
-      `KeeBridgeProvider/Info.plist` (#4) — split off once assertion (sign-in against an
-      existing passkey, above) landed. `PasskeyCrypto` already has every primitive this
-      needs (key generation, signing, public-key COSE encoding, `authenticatorData`,
-      `attestationObject`); `VaultService.setPasskey` already exists for the write side.
-      What's left: a new `prepareInterfaceForPasskeyRegistration(with:)` override,
-      generating a fresh key via `PasskeyCrypto.generatePrivateKeyPEM()`, storing it via
-      `setPasskey` (as a NEW entry, or on an existing one — needs a UI decision, since
-      registration has no `recordIdentifier` to key off yet, unlike assertion), and
-      returning an `ASPasskeyRegistrationCredential` built from `PasskeyCrypto.attestationObject`.
-      Declare `ProvidesPasskeys: true` only once THIS lands too — until then, the assertion
-      wiring above stays inert (the system never routes a passkey request to an extension
-      that hasn't declared the capability), which is deliberate: declaring it before
-      registration exists would advertise a capability this extension can't yet fully
-      honor. This is also the one piece of the whole passkey effort that's genuinely hard
-      to verify headlessly (needs a real Safari passkey registration flow). The 9
-      Proton-Pass-carried passkeys stay informational-only per the design spike's
-      recommendation — reconstructing them (separate proprietary double-nested MessagePack
-      format) is optional, riskier follow-up, not a blocker.
+- [ ] **Prerequisite for the item below.** Extension→app write-back path for
+      extension-originated vault writes (#4) — found while scoping passkey registration,
+      NOT previously identified by the original design spike. `README.md`'s mirroring is
+      strictly ONE-WAY today: the unsandboxed app writes the vault into
+      `KeeBridgeProvider`'s own sandbox container (`KeeBridgeConfig.vaultMirrorURLForApp`/
+      `vaultMirrorURLForExtension`, same path computed two ways — confirmed by reading
+      `VaultController.mirrorVaultToExtension`, called after every app-side
+      create/update/delete), and nothing ever reads a change back the other way. If
+      `KeeBridgeProvider` used its existing `VaultService.setPasskey` to write a
+      newly-registered passkey into ITS OWN mirror copy (the naive approach), that write:
+      (1) never reaches the real, Google-Drive-synced vault file KeePassXC/the app read —
+      the new passkey doesn't durably exist anywhere but the extension's sandbox
+      container, and (2) gets silently clobbered the next time the app re-mirrors (any
+      future app-side edit re-overwrites the mirror from the stale, passkey-less real
+      vault) — a passkey the relying party believes was durably registered would silently
+      stop working. This is a data-integrity bug waiting to happen, not a cosmetic gap, so
+      registration must NOT ship until it's solved. Likely shape (not yet designed in
+      detail): since `vaultMirrorURLForApp()` is a normal, computable filesystem path from
+      the UNSANDBOXED app's side (same directory it already writes into — no new
+      entitlement needed, mirroring the reasoning that already lets the app write INTO the
+      extension's container), the app can plausibly detect on next launch/activation that
+      the mirror changed independently of its own last write (mtime/hash comparison) and
+      merge that change back into the real vault before re-mirroring forward — needs
+      careful design around atomicity and concurrent-edit conflicts, which is why this is
+      its own item rather than a one-line fix. See
+      `docs/done/2026-08-31-passkey-registration-write-path-spike.md` for the full writeup.
+- [ ] **BLOCKED on the item above.** Passkey support: registration (creating a NEW passkey
+      from KeeBridge) — `prepareInterface(forPasskeyRegistration:)`/
+      `ASPasskeyRegistrationCredential` in `KeeBridgeProvider`, plus declaring
+      `ProvidesPasskeys: true` in `KeeBridgeProvider/Info.plist` (#4). `PasskeyCrypto`
+      already has almost every primitive this needs (key generation, signing, public-key
+      COSE encoding, `authenticatorData`, `attestationObject`) — still missing: generating
+      a fresh, random WebAuthn credential ID (a small addition, not yet written).
+      `VaultService.setPasskey` already exists for the write side (once the item above
+      makes writing from the extension safe); the exact override signature is confirmed
+      (`func prepareInterface(forPasskeyRegistration registrationRequest: any
+      ASCredentialRequest)`, macOS 14+, via Apple's DocC JSON API). What's NOT settled is
+      which vault entry a freshly-registered passkey attaches to (no `recordIdentifier`
+      exists yet, unlike assertion) — auto-attaching to a single URL-host match, falling
+      back to an entry-picker UI (reusing `CredentialListView`) for zero/multiple matches,
+      is the likely v1 shape — plus a still-unimplemented
+      `performWithoutUserInteractionIfPossible(passkeyRegistration:)` override (a
+      *different* method than the existing `provideCredentialWithoutUserInteraction(for:)`,
+      which does NOT cover this passkey-specific hook) that must exist before
+      `ProvidesPasskeys` is ever declared, or the system may hit an unoverridden base-class
+      method on a silent-registration attempt. Genuinely hard to verify headlessly either
+      way (needs a real Safari passkey registration flow). The 9 Proton-Pass-carried
+      passkeys stay informational-only per the design spike's recommendation —
+      reconstructing them (separate proprietary double-nested MessagePack format) is
+      optional, riskier follow-up, not a blocker.
 - [ ] QR code scanning for adding a passkey (#7) — some sites offer a QR code to add a
       passkey; KeeBridge should support scanning it. Depends on passkey support (#4)
       existing first — not buildable until that lands.
