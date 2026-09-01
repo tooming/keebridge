@@ -151,15 +151,19 @@
       reasoned about, not tested against a live race. Not a blocker for registration itself
       (that's a separate, pre-existing risk class this change doesn't make worse), but worth
       a human's eventual attention.
-- [ ] **BLOCKED on the item immediately above.** Passkey support: registration (creating a
-      NEW passkey from KeeBridge) — `prepareInterface(forPasskeyRegistration:)`/
-      `ASPasskeyRegistrationCredential` in `KeeBridgeProvider`, plus declaring
-      `ProvidesPasskeys: true` in `KeeBridgeProvider/Info.plist` (#4). `PasskeyCrypto`
-      already has almost every primitive this needs (key generation, signing, public-key
-      COSE encoding, `authenticatorData`, `attestationObject`) — still missing: generating
-      a fresh, random WebAuthn credential ID (a small addition, not yet written).
-      `VaultService.setPasskey` already exists for the write side (once the item above
-      makes writing from the extension safe); the exact override signature is confirmed
+- [x] ~~Passkey support: WebAuthn credential ID generation (`PasskeyCrypto.generateCredentialID`) (#4)~~
+      — done, see `docs/done/2026-09-01-passkey-credential-id.md`. 16 random bytes via
+      swift-crypto's CSPRNG-backed `SymmetricKey`, not Foundation's weaker
+      `.random(in:)` — the one primitive the registration item below was still missing.
+- [ ] Passkey support: registration (creating a NEW passkey from KeeBridge) —
+      `prepareInterface(forPasskeyRegistration:)`/`ASPasskeyRegistrationCredential` in
+      `KeeBridgeProvider`, plus declaring `ProvidesPasskeys: true` in
+      `KeeBridgeProvider/Info.plist` (#4). `PasskeyCrypto` now has every primitive this
+      needs (key generation, signing, public-key COSE encoding, `authenticatorData`,
+      `attestationObject`, credential ID generation) and the extension→app write-back path
+      is safe (`mergeExtensionOriginatedPasskeys`, wired in above) — this item is no
+      longer blocked on either. `VaultService.setPasskey` already exists for the write
+      side; the exact override signature is confirmed
       (`func prepareInterface(forPasskeyRegistration registrationRequest: any
       ASCredentialRequest)`, macOS 14+, via Apple's DocC JSON API). What's NOT settled is
       which vault entry a freshly-registered passkey attaches to (no `recordIdentifier`
