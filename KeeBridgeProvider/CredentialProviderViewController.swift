@@ -6,12 +6,25 @@
 // Passkey assertion (v4): completeCredential now also handles an incoming
 // ASPasskeyCredentialRequest by signing with PasskeyCrypto against an
 // existing entry's stored key — see completePasskeyAssertion below.
-// Registration (creating a NEW passkey from this extension) is NOT wired
-// yet, and `ProvidesPasskeys` is deliberately NOT declared in Info.plist
-// until it is — see the ROADMAP entry for #4. Until that capability flag
-// flips, the system never actually routes a passkey request here, so this
-// path is inert, forward-compatible groundwork, same as every other
-// passkey primitive landed so far.
+//
+// Passkey registration (v5): prepareInterface(forPasskeyRegistration:)
+// creates a brand-new passkey — see beginPasskeyRegistration/
+// completePasskeyRegistration below. Unlike assertion, the incoming
+// request carries no recordIdentifier (no vault entry has been chosen
+// yet): v1 policy is auto-attach on a single URL-host match against the
+// relying party ID, falling back to the same CredentialListView the
+// manual password picker uses for zero/multiple matches. This is a WRITE
+// (VaultService.setPasskey), unlike every other v1 flow in this file —
+// straight into this extension's own sandboxed vault mirror, which the
+// app's mirrorVaultToExtension merges back into the real source vault the
+// next time it re-mirrors (VaultService.mergeExtensionOriginatedPasskeys).
+// Deliberately NOT implementing
+// performWithoutUserInteractionIfPossible(passkeyRegistration:) — that
+// override is only required when opting into
+// SupportsConditionalPasskeyRegistration (silent/background registration,
+// macOS 15+), a separate, still-unclaimed capability from `ProvidesPasskeys`
+// itself (confirmed via Apple's DocC JSON API, correcting an earlier,
+// overstated ROADMAP note that conflated the two).
 //
 // This extension is fully independent from the KeeBridge app — it has its
 // own local (unshared) Keychain cache and its own unlock prompt the first
@@ -91,6 +104,7 @@ final class CredentialProviderViewController: ASCredentialProviderViewController
 
     private var pendingServiceIdentifiers: [ASCredentialServiceIdentifier] = []
     private var pendingCredentialRequest: ASCredentialRequest?
+    private var pendingPasskeyRegistrationRequest: ASCredentialRequest?
 
     // STATIC, not instance: confirmed via logging that the system creates
     // a fresh CredentialProviderViewController instance per field (username,
@@ -209,6 +223,7 @@ final class CredentialProviderViewController: ASCredentialProviderViewController
         beginRequest()
         pendingServiceIdentifiers = serviceIdentifiers
         pendingCredentialRequest = nil
+        pendingPasskeyRegistrationRequest = nil
         showUnlockOrProceed()
     }
 
@@ -229,6 +244,19 @@ final class CredentialProviderViewController: ASCredentialProviderViewController
         log.notice("→ prepareInterfaceToProvideCredential(for:) called, isWorking=\(self.isWorking), hasCachedContent=\(Self.validCachedContent() != nil)")
         beginRequest()
         pendingCredentialRequest = credentialRequest
+        pendingPasskeyRegistrationRequest = nil
+        pendingServiceIdentifiers = []
+        showUnlockOrProceed()
+    }
+
+    // MARK: - Passkey registration (system asks us to create a NEW passkey)
+
+    @available(macOS 14.0, *)
+    override func prepareInterface(forPasskeyRegistration registrationRequest: any ASCredentialRequest) {
+        log.notice("→ prepareInterface(forPasskeyRegistration:) called, isWorking=\(self.isWorking), hasCachedContent=\(Self.validCachedContent() != nil)")
+        beginRequest()
+        pendingPasskeyRegistrationRequest = registrationRequest
+        pendingCredentialRequest = nil
         pendingServiceIdentifiers = []
         showUnlockOrProceed()
     }
@@ -286,6 +314,18 @@ final class CredentialProviderViewController: ASCredentialProviderViewController
         isWorking = false
         log.notice("✓ completeAssertionRequest(using:) — passkey assertion")
         extensionContext.completeAssertionRequest(using: credential, completionHandler: nil)
+    }
+
+    private func respondComplete(with credential: ASPasskeyRegistrationCredential) {
+        guard !hasResponded else {
+            log.error("respondComplete(passkey registration) called AFTER already responded — ignored")
+            return
+        }
+        hasResponded = true
+        watchdogItem?.cancel()
+        isWorking = false
+        log.notice("✓ completeRegistrationRequest(using:) — passkey registration")
+        extensionContext.completeRegistrationRequest(using: credential, completionHandler: nil)
     }
 
     private func respondCancel(_ code: ASExtensionError.Code) {
@@ -445,8 +485,17 @@ final class CredentialProviderViewController: ASCredentialProviderViewController
     }
 
     private func proceed(withContent content: KDBXContent) {
-        log.debug("proceed(withContent:) — havePendingCredentialRequest=\(self.pendingCredentialRequest != nil)")
-        if let credentialRequest = pendingCredentialRequest {
+        log.debug("proceed(withContent:) — havePendingCredentialRequest=\(self.pendingCredentialRequest != nil), havePendingPasskeyRegistrationRequest=\(self.pendingPasskeyRegistrationRequest != nil)")
+        if #available(macOS 14.0, *), let registrationRequest = pendingPasskeyRegistrationRequest {
+            // Same viewDidAppear gating as the completeCredential branch
+            // below — beginPasskeyRegistration may complete synchronously
+            // (single auto-attach match) or show a picker first, either
+            // way only safe once the popover has actually finished
+            // presenting.
+            runAfterAppear { [weak self] in
+                self?.beginPasskeyRegistration(for: registrationRequest, content: content)
+            }
+        } else if let credentialRequest = pendingCredentialRequest {
             // Gated on viewDidAppear — see the hasAppeared/afterAppear doc
             // comment near their declaration for why: completeCredential
             // ends in completeRequest(), which the system apparently
@@ -535,6 +584,118 @@ final class CredentialProviderViewController: ASCredentialProviderViewController
             ))
         } catch {
             log.error("completePasskeyAssertion: threw: \(String(describing: error))")
+            respondCancel(withError: error)
+        }
+    }
+
+    // MARK: - Passkey registration (v5 — creating a NEW passkey)
+    //
+    // See the header comment for the overall policy. Unlike every other
+    // v1 flow, this WRITES (VaultService.setPasskey) — into this
+    // extension's own sandboxed vault mirror, same file `vaultURL`/
+    // cachedPreHash already point at for reads.
+
+    @available(macOS 14.0, *)
+    private func beginPasskeyRegistration(for request: ASCredentialRequest, content: KDBXContent) {
+        guard let passkeyRequest = request as? ASPasskeyCredentialRequest,
+              let identity = passkeyRequest.credentialIdentity as? ASPasskeyCredentialIdentity
+        else {
+            log.error("beginPasskeyRegistration: unexpected request/identity type — cancelling")
+            respondCancel(.failed)
+            return
+        }
+
+        let entries = vaultService.listEntries(in: content)
+        let rpID = identity.relyingPartyIdentifier
+        // Same host-matching idea prepareCredentialList's manual list uses
+        // for service identifiers, plus a subdomain check: a WebAuthn
+        // relying party ID is a registrable domain suffix of the actual
+        // origin (spec §5.1.3), so a vault entry's URL host is often a
+        // subdomain of it (e.g. host "accounts.example.com" for rpID
+        // "example.com"), not an exact match.
+        let matching = entries.filter { entry in
+            guard let host = URL(string: entry.url)?.host else { return false }
+            return host == rpID || host.hasSuffix("." + rpID)
+        }
+
+        if matching.count == 1 {
+            completePasskeyRegistration(for: passkeyRequest, identity: identity, entry: matching[0])
+        } else {
+            // Zero or multiple matches — ask the user, same picker the
+            // manual password list uses. isWorking=false here for the same
+            // reason showList sets it: legitimately idle, waiting on a
+            // click, not mid-request-processing.
+            log.notice("beginPasskeyRegistration: \(matching.count) URL-host matches for rpID=\(rpID, privacy: .public) — showing picker")
+            isWorking = false
+            preferredContentSize = NSSize(width: 380, height: 360)
+            embed(CredentialListView(entries: matching.isEmpty ? entries : matching) { [weak self] entry in
+                self?.completePasskeyRegistration(for: passkeyRequest, identity: identity, entry: entry)
+            })
+        }
+    }
+
+    @available(macOS 14.0, *)
+    private func completePasskeyRegistration(
+        for request: ASPasskeyCredentialRequest, identity: ASPasskeyCredentialIdentity, entry: VaultLoginEntry
+    ) {
+        guard let vaultURL, let preHash = Self.cachedPreHash else {
+            log.error("completePasskeyRegistration: missing vault URL/cached key — cancelling")
+            respondCancel(.failed)
+            return
+        }
+
+        // WebAuthn spec §6.3.2 step 4: the AUTHENTICATOR (us) picks the
+        // credential ID — never trust/reuse whatever (if anything) the
+        // system populated on the incoming identity for a not-yet-existing
+        // credential.
+        let credentialID = PasskeyCrypto.generateCredentialID()
+        let privateKeyPEM = PasskeyCrypto.generatePrivateKeyPEM()
+
+        do {
+            let coseKey = try PasskeyCrypto.coseEncodedPublicKey(forPrivateKeyPEM: privateKeyPEM)
+            let authenticatorData = try PasskeyCrypto.authenticatorData(
+                relyingPartyID: identity.relyingPartyIdentifier,
+                signCount: 0,
+                attestedCredentialData: .init(
+                    // All-zero AAGUID — see AttestedCredentialData's own
+                    // doc comment (PasskeyCrypto.swift) for why that's a
+                    // legitimate, common choice, not a placeholder left
+                    // unfinished.
+                    aaguid: Data(repeating: 0, count: 16),
+                    credentialID: credentialID,
+                    coseEncodedPublicKey: coseKey
+                )
+            )
+            let attestationObject = PasskeyCrypto.attestationObject(authenticatorData: authenticatorData)
+
+            try vaultService.setPasskey(
+                uuid: entry.uuid,
+                relyingParty: identity.relyingPartyIdentifier,
+                credentialID: credentialID,
+                privateKeyPEM: privateKeyPEM,
+                username: identity.userName,
+                userHandle: identity.userHandle,
+                at: vaultURL,
+                rawKeyData: preHash
+            )
+            // That write landed in the mirror on disk, not in the
+            // in-memory Self.cachedContent this request read from —
+            // invalidate the cache so the next reveal within
+            // contentCacheTTL re-reads from disk (cheap: cachedPreHash is
+            // still warm, no repeat Touch ID) instead of silently serving
+            // pre-registration content.
+            Self.cachedContent = nil
+            Self.cachedContentDate = nil
+
+            log.notice("completePasskeyRegistration: registered — relyingParty=\(identity.relyingPartyIdentifier, privacy: .public)")
+            respondComplete(with: ASPasskeyRegistrationCredential(
+                relyingParty: identity.relyingPartyIdentifier,
+                clientDataHash: request.clientDataHash,
+                credentialID: credentialID,
+                attestationObject: attestationObject
+            ))
+        } catch {
+            log.error("completePasskeyRegistration: threw: \(String(describing: error))")
             respondCancel(withError: error)
         }
     }

@@ -155,27 +155,25 @@
       — done, see `docs/done/2026-09-01-passkey-credential-id.md`. 16 random bytes via
       swift-crypto's CSPRNG-backed `SymmetricKey`, not Foundation's weaker
       `.random(in:)` — the one primitive the registration item below was still missing.
-- [ ] Passkey support: registration (creating a NEW passkey from KeeBridge) —
-      `prepareInterface(forPasskeyRegistration:)`/`ASPasskeyRegistrationCredential` in
-      `KeeBridgeProvider`, plus declaring `ProvidesPasskeys: true` in
-      `KeeBridgeProvider/Info.plist` (#4). `PasskeyCrypto` now has every primitive this
-      needs (key generation, signing, public-key COSE encoding, `authenticatorData`,
-      `attestationObject`, credential ID generation) and the extension→app write-back path
-      is safe (`mergeExtensionOriginatedPasskeys`, wired in above) — this item is no
-      longer blocked on either. `VaultService.setPasskey` already exists for the write
-      side; the exact override signature is confirmed
-      (`func prepareInterface(forPasskeyRegistration registrationRequest: any
-      ASCredentialRequest)`, macOS 14+, via Apple's DocC JSON API). What's NOT settled is
-      which vault entry a freshly-registered passkey attaches to (no `recordIdentifier`
-      exists yet, unlike assertion) — auto-attaching to a single URL-host match, falling
-      back to an entry-picker UI (reusing `CredentialListView`) for zero/multiple matches,
-      is the likely v1 shape — plus a still-unimplemented
-      `performWithoutUserInteractionIfPossible(passkeyRegistration:)` override (a
-      *different* method than the existing `provideCredentialWithoutUserInteraction(for:)`,
-      which does NOT cover this passkey-specific hook) that must exist before
-      `ProvidesPasskeys` is ever declared, or the system may hit an unoverridden base-class
-      method on a silent-registration attempt. Genuinely hard to verify headlessly either
-      way (needs a real Safari passkey registration flow). The 9 Proton-Pass-carried
+- [x] ~~Passkey support: registration (creating a NEW passkey from KeeBridge) (#4)~~ —
+      done, see `docs/done/2026-09-01-passkey-registration.md`.
+      `prepareInterface(forPasskeyRegistration:)` in `KeeBridgeProvider`, using every
+      `PasskeyCrypto` primitive built so far, writes the new key material via
+      `VaultService.setPasskey` into the extension's own vault mirror (merged back into
+      the source vault by the write-back path wired in above), and responds with
+      `ASPasskeyRegistrationCredential`. `ProvidesPasskeys: true` is now declared in
+      `KeeBridgeProvider/Info.plist` — this also activates the previously-inert passkey
+      *assertion* code from earlier in this ROADMAP, since both flows gate on the same
+      capability flag. Entry attachment: auto-attach on a single URL-host match against
+      the relying party ID (exact or subdomain), falling back to the existing
+      `CredentialListView` picker for zero/multiple matches. **Correction to this item's
+      earlier text**: `performWithoutUserInteractionIfPossible(passkeyRegistration:)` is
+      NOT a prerequisite for declaring `ProvidesPasskeys` — confirmed via Apple's DocC
+      JSON API, it's only required for the separate, still-unclaimed
+      `SupportsConditionalPasskeyRegistration` capability (silent/background
+      registration), which this item does not opt into. Genuinely hard to verify
+      headlessly (needs a real Safari passkey-creation flow on real hardware) — flagged
+      as a "still needs a human eyeball" caveat in the PR. The 9 Proton-Pass-carried
       passkeys stay informational-only per the design spike's recommendation —
       reconstructing them (separate proprietary double-nested MessagePack format) is
       optional, riskier follow-up, not a blocker.
