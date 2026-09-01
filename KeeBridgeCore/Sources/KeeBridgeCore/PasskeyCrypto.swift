@@ -15,7 +15,9 @@
 // (`fmt`/`attStmt`/`authData`) that wraps `authenticatorData` — using
 // `fmt: "none"` with an empty `attStmt`, the simplest valid
 // self-attestation (spec §8.7), since KeeBridge generates its own P-256
-// keys locally and has no hardware attestation chain to prove. Still no
+// keys locally and has no hardware attestation chain to prove. Also
+// generates the random credential ID a fresh registration's
+// `attestedCredentialData` needs. Still no
 // `ASPasskeyCredentialRequest`/`ASPasskeyRegistrationCredential`/
 // `ASPasskeyAssertionCredential` wiring — that's the remaining,
 // GUI-dependent slice, tracked separately in the ROADMAP entry for #4.
@@ -67,6 +69,22 @@ public enum PasskeyCrypto {
     /// `VaultService.setPasskey(privateKeyPEM:)`.
     public static func generatePrivateKeyPEM() -> String {
         P256.Signing.PrivateKey().pemRepresentation
+    }
+
+    /// Generates a fresh, random WebAuthn credential ID (spec §4,
+    /// "Credential ID": an opaque byte sequence that identifies a
+    /// credential — no fixed size is mandated, but it must be
+    /// unguessable, i.e. drawn from a strong source of entropy). 16 bytes
+    /// (128 bits) matches what major platform authenticators emit in
+    /// practice for a discoverable credential. Generated via
+    /// swift-crypto's `SymmetricKey` (CSPRNG-backed), not Foundation's
+    /// `.random(in:)`/`SystemRandomNumberGenerator` — consistent with
+    /// this file's "no hand-rolled crypto" rule, same as every other
+    /// primitive here. This is the one piece `attestedCredentialData`
+    /// needs that registration didn't have yet — see the ROADMAP entry
+    /// for #4.
+    public static func generateCredentialID() -> Data {
+        SymmetricKey(size: .bits128).withUnsafeBytes { Data($0) }
     }
 
     /// Parses a PKCS#8 PEM-encoded P-256 private key (as produced by

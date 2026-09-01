@@ -33,6 +33,28 @@ import Testing
     #expect(a != b)
 }
 
+// MARK: - generateCredentialID
+
+@Test func generateCredentialIDProduces16Bytes() {
+    let id = PasskeyCrypto.generateCredentialID()
+    #expect(id.count == 16)
+}
+
+@Test func generateCredentialIDProducesDistinctIDsEachCall() {
+    let a = PasskeyCrypto.generateCredentialID()
+    let b = PasskeyCrypto.generateCredentialID()
+    #expect(a != b)
+}
+
+@Test func generateCredentialIDIsNotAllZero() {
+    // A CSPRNG producing an all-zero 16-byte value is astronomically
+    // unlikely (odds ~1 in 2^128) — a stuck/broken generator is a far
+    // more plausible explanation than genuine bad luck, so this is a
+    // legitimate regression check, not flakiness.
+    let id = PasskeyCrypto.generateCredentialID()
+    #expect(id != Data(repeating: 0, count: 16))
+}
+
 @Test func signProducesAValidSignatureForTheMatchingPublicKey() throws {
     let pem = PasskeyCrypto.generatePrivateKeyPEM()
     let message = Data("authenticatorData || clientDataHash".utf8)
