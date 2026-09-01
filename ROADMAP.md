@@ -119,34 +119,41 @@
       against Apple's own DocC JSON API, not guessed). Still inert in a real system flow:
       see the follow-up bullet immediately below for why, and for the remaining,
       genuinely-hard-to-verify-headlessly half.
-- [ ] **Prerequisite for the item below.** Extension→app write-back path for
-      extension-originated vault writes (#4) — found while scoping passkey registration,
-      NOT previously identified by the original design spike. `README.md`'s mirroring is
-      strictly ONE-WAY today: the unsandboxed app writes the vault into
-      `KeeBridgeProvider`'s own sandbox container (`KeeBridgeConfig.vaultMirrorURLForApp`/
-      `vaultMirrorURLForExtension`, same path computed two ways — confirmed by reading
-      `VaultController.mirrorVaultToExtension`, called after every app-side
-      create/update/delete), and nothing ever reads a change back the other way. If
-      `KeeBridgeProvider` used its existing `VaultService.setPasskey` to write a
-      newly-registered passkey into ITS OWN mirror copy (the naive approach), that write:
-      (1) never reaches the real, Google-Drive-synced vault file KeePassXC/the app read —
-      the new passkey doesn't durably exist anywhere but the extension's sandbox
-      container, and (2) gets silently clobbered the next time the app re-mirrors (any
-      future app-side edit re-overwrites the mirror from the stale, passkey-less real
-      vault) — a passkey the relying party believes was durably registered would silently
-      stop working. This is a data-integrity bug waiting to happen, not a cosmetic gap, so
-      registration must NOT ship until it's solved. Likely shape (not yet designed in
-      detail): since `vaultMirrorURLForApp()` is a normal, computable filesystem path from
-      the UNSANDBOXED app's side (same directory it already writes into — no new
-      entitlement needed, mirroring the reasoning that already lets the app write INTO the
-      extension's container), the app can plausibly detect on next launch/activation that
-      the mirror changed independently of its own last write (mtime/hash comparison) and
-      merge that change back into the real vault before re-mirroring forward — needs
-      careful design around atomicity and concurrent-edit conflicts, which is why this is
-      its own item rather than a one-line fix. See
-      `docs/done/2026-08-31-passkey-registration-write-path-spike.md` for the full writeup.
-- [ ] **BLOCKED on the item above.** Passkey support: registration (creating a NEW passkey
-      from KeeBridge) — `prepareInterface(forPasskeyRegistration:)`/
+- [x] ~~Extension→app write-back MERGE PRIMITIVE: `VaultService.mergeExtensionOriginatedPasskeys` (#4)~~
+      — done, see `docs/done/2026-08-31-passkey-write-back-merge-primitive.md`. Found while
+      scoping passkey registration, NOT previously identified by the original design spike:
+      `README.md`'s mirroring is strictly ONE-WAY (the unsandboxed app writes the vault into
+      `KeeBridgeProvider`'s own sandbox container; nothing ever reads a change back the
+      other way), so an extension-originated write (e.g. a freshly-registered passkey)
+      would silently vanish the next time the app re-mirrors — see
+      `docs/done/2026-08-31-passkey-registration-write-path-spike.md` for the full
+      data-integrity finding. This new `KeeBridgeCore` function copies just the passkey
+      fields from a mirror-copy entry onto the matching-UUID source-vault entry (narrow,
+      not a general three-way merge — same "touch only the five passkey fields" contract
+      `setPasskey` already has), fully unit-tested via `swift test` (happy path, idempotent
+      re-run, no-op on a passkey-free mirror, and a defensive no-create-on-source case).
+      Still NOT wired into anything that calls it — see the follow-up bullet immediately
+      below.
+- [ ] Wire `mergeExtensionOriginatedPasskeys` into `VaultController.mirrorVaultToExtension`
+      (#4) — buildable now, the primitive it needs already exists (item above). The app
+      needs to actually CALL the merge primitive at the right moment,
+      before it overwrites the mirror. Likely shape (not yet designed in detail): since
+      `vaultMirrorURLForApp()` is a normal, computable filesystem path from the UNSANDBOXED
+      app's side (same directory it already writes into — no new entitlement needed), the
+      app can plausibly detect, right before `mirrorVaultToExtension` would overwrite the
+      mirror, that the mirror changed independently of its own last write (mtime or content
+      hash of the mirror, checked against what it wrote last time) and call
+      `mergeExtensionOriginatedPasskeys` first when so. Needs care around: where to persist
+      "the hash/mtime of what the app itself last wrote" (a small sidecar file alongside the
+      mirror, most likely), and what happens if the REAL source vault also changed
+      externally (e.g. edited in KeePassXC, synced via Google Drive) in the same window —
+      the merge primitive itself re-opens the source fresh at merge time, so a concurrent
+      unrelated edit composes fine as long as there's no UUID collision (KDBX UUIDs
+      guarantee that), but this hasn't been exercised against a real concurrent-edit
+      scenario. This is compiled-only (`xcodebuild`), not `swift test`-covered, unlike the
+      merge primitive itself.
+- [ ] **BLOCKED on the item immediately above.** Passkey support: registration (creating a
+      NEW passkey from KeeBridge) — `prepareInterface(forPasskeyRegistration:)`/
       `ASPasskeyRegistrationCredential` in `KeeBridgeProvider`, plus declaring
       `ProvidesPasskeys: true` in `KeeBridgeProvider/Info.plist` (#4). `PasskeyCrypto`
       already has almost every primitive this needs (key generation, signing, public-key

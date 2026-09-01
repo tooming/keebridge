@@ -180,6 +180,145 @@ private func makeVaultWithPasskeyEntry(at url: URL) throws -> String {
     #expect(metadata?.credentialID == Data([0xAA, 0xBB]))
 }
 
+// MARK: - mergeExtensionOriginatedPasskeys
+//
+// Simulates the scenario `docs/done/2026-08-31-passkey-registration-write-path-spike.md`
+// describes: a "source" vault and a "mirror" copy start identical, the
+// mirror independently gains a passkey (standing in for what the
+// extension will eventually write there directly), and the merge function
+// is expected to copy just that passkey back into source without
+// disturbing anything else.
+
+@Test func mergeExtensionOriginatedPasskeysCopiesAMirrorOnlyPasskeyIntoSource() throws {
+    let service = VaultService()
+    let sourceURL = tempVaultURL()
+    let mirrorURL = tempVaultURL()
+    defer {
+        try? FileManager.default.removeItem(at: sourceURL)
+        try? FileManager.default.removeItem(at: mirrorURL)
+    }
+
+    try service.createVault(at: sourceURL, masterPassword: testPassword, databaseName: "Test Vault")
+    let draft = VaultService.EntryDraft(title: "example.com", username: "alice", password: "s3cret")
+    let uuid = try service.createEntry(draft, at: sourceURL, masterPassword: testPassword)
+
+    // Mirror starts as an exact copy...
+    try FileManager.default.copyItem(at: sourceURL, to: mirrorURL)
+    // ...then independently gains a passkey (standing in for the extension's own write).
+    try service.setPasskey(
+        uuid: uuid, relyingParty: "example.com", credentialID: Data([0xAA, 0xBB]),
+        privateKeyPEM: "-----BEGIN PRIVATE KEY-----\nMOCK-NOT-A-REAL-KEY\n-----END PRIVATE KEY-----",
+        username: "alice@example.com", userHandle: Data([0xCC]),
+        at: mirrorURL, masterPassword: testPassword
+    )
+
+    // Source doesn't have the passkey yet.
+    #expect(try service.passkeyMetadata(at: sourceURL, masterPassword: testPassword, entryUUID: uuid) == nil)
+
+    let merged = try service.mergeExtensionOriginatedPasskeys(
+        fromMirrorAt: mirrorURL, intoSourceAt: sourceURL, masterPassword: testPassword
+    )
+    #expect(merged == 1)
+
+    let metadata = try service.passkeyMetadata(at: sourceURL, masterPassword: testPassword, entryUUID: uuid)
+    #expect(metadata?.relyingParty == "example.com")
+    #expect(metadata?.username == "alice@example.com")
+    #expect(metadata?.credentialID == Data([0xAA, 0xBB]))
+
+    // Every other field on the entry must survive untouched.
+    let entries = try service.listEntries(at: sourceURL, masterPassword: testPassword)
+    #expect(entries.count == 1)
+    #expect(entries[0].title == "example.com")
+    #expect(entries[0].username == "alice")
+    let revealed = try service.revealEntry(uuid: uuid, at: sourceURL, masterPassword: testPassword)
+    #expect(revealed.password == "s3cret")
+}
+
+@Test func mergeExtensionOriginatedPasskeysIsIdempotent() throws {
+    let service = VaultService()
+    let sourceURL = tempVaultURL()
+    let mirrorURL = tempVaultURL()
+    defer {
+        try? FileManager.default.removeItem(at: sourceURL)
+        try? FileManager.default.removeItem(at: mirrorURL)
+    }
+
+    try service.createVault(at: sourceURL, masterPassword: testPassword, databaseName: "Test Vault")
+    let draft = VaultService.EntryDraft(title: "example.com", username: "alice", password: "s3cret")
+    let uuid = try service.createEntry(draft, at: sourceURL, masterPassword: testPassword)
+    try FileManager.default.copyItem(at: sourceURL, to: mirrorURL)
+    try service.setPasskey(
+        uuid: uuid, relyingParty: "example.com", credentialID: Data([0xAA, 0xBB]),
+        privateKeyPEM: "-----BEGIN PRIVATE KEY-----\nMOCK-NOT-A-REAL-KEY\n-----END PRIVATE KEY-----",
+        at: mirrorURL, masterPassword: testPassword
+    )
+
+    let firstMerge = try service.mergeExtensionOriginatedPasskeys(
+        fromMirrorAt: mirrorURL, intoSourceAt: sourceURL, masterPassword: testPassword
+    )
+    #expect(firstMerge == 1)
+
+    // Nothing new in the mirror the second time — must be a no-op.
+    let secondMerge = try service.mergeExtensionOriginatedPasskeys(
+        fromMirrorAt: mirrorURL, intoSourceAt: sourceURL, masterPassword: testPassword
+    )
+    #expect(secondMerge == 0)
+}
+
+@Test func mergeExtensionOriginatedPasskeysReturnsZeroWhenMirrorHasNoPasskeys() throws {
+    let service = VaultService()
+    let sourceURL = tempVaultURL()
+    let mirrorURL = tempVaultURL()
+    defer {
+        try? FileManager.default.removeItem(at: sourceURL)
+        try? FileManager.default.removeItem(at: mirrorURL)
+    }
+
+    try service.createVault(at: sourceURL, masterPassword: testPassword, databaseName: "Test Vault")
+    _ = try service.createEntry(
+        VaultService.EntryDraft(title: "example.com", username: "alice", password: "s3cret"),
+        at: sourceURL, masterPassword: testPassword
+    )
+    try FileManager.default.copyItem(at: sourceURL, to: mirrorURL)
+
+    let merged = try service.mergeExtensionOriginatedPasskeys(
+        fromMirrorAt: mirrorURL, intoSourceAt: sourceURL, masterPassword: testPassword
+    )
+    #expect(merged == 0)
+}
+
+@Test func mergeExtensionOriginatedPasskeysIgnoresAMirrorEntryAbsentFromSource() throws {
+    let service = VaultService()
+    let sourceURL = tempVaultURL()
+    let mirrorURL = tempVaultURL()
+    defer {
+        try? FileManager.default.removeItem(at: sourceURL)
+        try? FileManager.default.removeItem(at: mirrorURL)
+    }
+
+    try service.createVault(at: sourceURL, masterPassword: testPassword, databaseName: "Test Vault")
+    try FileManager.default.copyItem(at: sourceURL, to: mirrorURL)
+
+    // An entry that exists ONLY in the mirror (the extension can't create
+    // entries today, but this is defensive, not assumed-impossible).
+    let mirrorOnlyUUID = try service.createEntry(
+        VaultService.EntryDraft(title: "only-in-mirror.com", username: "bob", password: "hunter2"),
+        at: mirrorURL, masterPassword: testPassword
+    )
+    try service.setPasskey(
+        uuid: mirrorOnlyUUID, relyingParty: "only-in-mirror.com", credentialID: Data([0x01]),
+        privateKeyPEM: "-----BEGIN PRIVATE KEY-----\nMOCK-NOT-A-REAL-KEY\n-----END PRIVATE KEY-----",
+        at: mirrorURL, masterPassword: testPassword
+    )
+
+    let merged = try service.mergeExtensionOriginatedPasskeys(
+        fromMirrorAt: mirrorURL, intoSourceAt: sourceURL, masterPassword: testPassword
+    )
+    #expect(merged == 0)
+    // Source must still have no entries at all — nothing got created.
+    #expect(try service.listEntries(at: sourceURL, masterPassword: testPassword).isEmpty)
+}
+
 @Test func setPasskeyThrowsForUnknownUUID() throws {
     let service = VaultService()
     let url = tempVaultURL()
