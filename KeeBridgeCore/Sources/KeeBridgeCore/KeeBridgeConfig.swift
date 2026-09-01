@@ -56,4 +56,20 @@ public enum KeeBridgeConfig {
         URL(fileURLWithPath: NSHomeDirectory())
             .appendingPathComponent(vaultMirrorFilename)
     }
+
+    /// Sidecar file, next to the mirror, recording the modification date
+    /// of the mirror AT THE MOMENT the app itself last wrote it. Lets the
+    /// app tell "the mirror is exactly what I last wrote" apart from
+    /// "something else (the `KeeBridgeProvider` extension, or manual
+    /// meddling) touched it since" — see
+    /// `docs/done/2026-08-31-passkey-registration-write-path-spike.md` for
+    /// why that distinction matters: the extension's mirror write (a
+    /// freshly-registered passkey, once registration exists) must be
+    /// merged back into the real vault before the app's next overwrite of
+    /// the mirror, or it's lost. Only valid when called from the
+    /// unsandboxed app, same as `vaultMirrorURLForApp()`.
+    public static func vaultMirrorLastWriteMarkerURLForApp() -> URL {
+        vaultMirrorURLForApp().deletingLastPathComponent()
+            .appendingPathComponent("\(vaultMirrorFilename).last-app-write")
+    }
 }

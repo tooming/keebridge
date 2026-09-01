@@ -134,24 +134,23 @@
       re-run, no-op on a passkey-free mirror, and a defensive no-create-on-source case).
       Still NOT wired into anything that calls it — see the follow-up bullet immediately
       below.
-- [ ] Wire `mergeExtensionOriginatedPasskeys` into `VaultController.mirrorVaultToExtension`
-      (#4) — buildable now, the primitive it needs already exists (item above). The app
-      needs to actually CALL the merge primitive at the right moment,
-      before it overwrites the mirror. Likely shape (not yet designed in detail): since
-      `vaultMirrorURLForApp()` is a normal, computable filesystem path from the UNSANDBOXED
-      app's side (same directory it already writes into — no new entitlement needed), the
-      app can plausibly detect, right before `mirrorVaultToExtension` would overwrite the
-      mirror, that the mirror changed independently of its own last write (mtime or content
-      hash of the mirror, checked against what it wrote last time) and call
-      `mergeExtensionOriginatedPasskeys` first when so. Needs care around: where to persist
-      "the hash/mtime of what the app itself last wrote" (a small sidecar file alongside the
-      mirror, most likely), and what happens if the REAL source vault also changed
-      externally (e.g. edited in KeePassXC, synced via Google Drive) in the same window —
-      the merge primitive itself re-opens the source fresh at merge time, so a concurrent
-      unrelated edit composes fine as long as there's no UUID collision (KDBX UUIDs
-      guarantee that), but this hasn't been exercised against a real concurrent-edit
-      scenario. This is compiled-only (`xcodebuild`), not `swift test`-covered, unlike the
-      merge primitive itself.
+- [x] ~~Wire `mergeExtensionOriginatedPasskeys` into `VaultController.mirrorVaultToExtension` (#4)~~
+      — done, see `docs/done/2026-09-01-passkey-writeback-wiring.md`.
+      `mirrorVaultToExtension` now takes a `rawKeyData:` parameter (threaded through all 5
+      call sites: `unlock`/`refresh`/`createEntry`/`updateEntry`/`deleteEntry`, which all
+      already had `preHash` in scope) and, before overwriting the mirror, checks whether it
+      changed independently of the app's own last write via mtime (compared against a new
+      sidecar marker file, `KeeBridgeConfig.vaultMirrorLastWriteMarkerURLForApp()`) — if so,
+      calls `mergeExtensionOriginatedPasskeys` first. Best-effort: a merge failure is
+      logged, never thrown, so the app's own write still lands even if the merge-back can't
+      complete. Compiled-only (`xcodebuild`), not `swift test`-covered — `VaultController`
+      has no test target, same as before this change. **Still open**: hasn't been exercised
+      against a real concurrent-edit scenario (the source vault changing externally, e.g.
+      via KeePassXC, in the same window) — the merge primitive re-opens the source fresh at
+      merge time so this composes correctly in principle (no UUID collision risk), but only
+      reasoned about, not tested against a live race. Not a blocker for registration itself
+      (that's a separate, pre-existing risk class this change doesn't make worse), but worth
+      a human's eventual attention.
 - [ ] **BLOCKED on the item immediately above.** Passkey support: registration (creating a
       NEW passkey from KeeBridge) — `prepareInterface(forPasskeyRegistration:)`/
       `ASPasskeyRegistrationCredential` in `KeeBridgeProvider`, plus declaring

@@ -127,7 +127,7 @@ final class VaultController: ObservableObject {
                 let entries = vaultService.listEntries(in: content)
                 let preHash = vaultService.preHashKeyData(forPassword: password)
                 try keychain.store(preHash)
-                try Self.mirrorVaultToExtension(from: vaultURL)
+                try Self.mirrorVaultToExtension(from: vaultURL, rawKeyData: preHash)
                 log.notice("unlock: succeeded, \(entries.count) entries, mirror written to \(KeeBridgeConfig.vaultMirrorURLForApp().path, privacy: .public)")
 
                 await MainActor.run { [weak self] in
@@ -194,7 +194,7 @@ final class VaultController: ObservableObject {
                 // auto-refresh) that's supposed to pick up external edits.
                 let content = try vaultService.openVault(at: vaultURL, rawKeyData: preHash)
                 let entries = vaultService.listEntries(in: content)
-                try Self.mirrorVaultToExtension(from: vaultURL)
+                try Self.mirrorVaultToExtension(from: vaultURL, rawKeyData: preHash)
 
                 await MainActor.run { [weak self] in
                     guard let self else { return }
@@ -286,7 +286,7 @@ final class VaultController: ObservableObject {
                 _ = try vaultService.createEntry(draft, at: vaultURL, rawKeyData: preHash)
                 let content = try vaultService.openVault(at: vaultURL, rawKeyData: preHash)
                 let entries = vaultService.listEntries(in: content)
-                try Self.mirrorVaultToExtension(from: vaultURL)
+                try Self.mirrorVaultToExtension(from: vaultURL, rawKeyData: preHash)
                 await MainActor.run { [weak self] in
                     guard let self else { return }
                     self.isWorking = false
@@ -312,7 +312,7 @@ final class VaultController: ObservableObject {
                 try vaultService.updateEntry(uuid: uuid, applying: draft, at: vaultURL, rawKeyData: preHash)
                 let content = try vaultService.openVault(at: vaultURL, rawKeyData: preHash)
                 let entries = vaultService.listEntries(in: content)
-                try Self.mirrorVaultToExtension(from: vaultURL)
+                try Self.mirrorVaultToExtension(from: vaultURL, rawKeyData: preHash)
                 await MainActor.run { [weak self] in
                     guard let self else { return }
                     self.isWorking = false
@@ -338,7 +338,7 @@ final class VaultController: ObservableObject {
                 try vaultService.deleteEntry(uuid: uuid, at: vaultURL, rawKeyData: preHash)
                 let content = try vaultService.openVault(at: vaultURL, rawKeyData: preHash)
                 let entries = vaultService.listEntries(in: content)
-                try Self.mirrorVaultToExtension(from: vaultURL)
+                try Self.mirrorVaultToExtension(from: vaultURL, rawKeyData: preHash)
                 await MainActor.run { [weak self] in
                     guard let self else { return }
                     self.isWorking = false
@@ -384,15 +384,78 @@ final class VaultController: ObservableObject {
     /// unsandboxed, it can write there too (sandboxing restricts what the
     /// *sandboxed* process can reach, not what another same-user process
     /// does to that directory). Static + nonisolated: pure function of its
-    /// argument, no instance state, safe to call from any thread.
-    nonisolated private static func mirrorVaultToExtension(from source: URL) throws {
+    /// arguments, no instance state, safe to call from any thread.
+    ///
+    /// Extension→app write-back (see
+    /// `docs/done/2026-08-31-passkey-registration-write-path-spike.md`):
+    /// before overwriting the mirror, checks whether it changed
+    /// independently of this app's own last write to it (mtime compared
+    /// against `KeeBridgeConfig.vaultMirrorLastWriteMarkerURLForApp()`,
+    /// the sidecar this function itself maintains) — if so, something the
+    /// extension wrote there (a freshly-registered passkey, once
+    /// registration exists) would otherwise be silently lost the moment
+    /// this overwrite happens, so it's merged into `source` first via
+    /// `VaultService.mergeExtensionOriginatedPasskeys`. Best-effort: a
+    /// merge failure is logged, not thrown — this app's own write must
+    /// still land even if the merge-back can't complete (e.g. a corrupt
+    /// or unreadable mirror), same as the mirror having simply never
+    /// existed yet.
+    nonisolated private static func mirrorVaultToExtension(from source: URL, rawKeyData: Data) throws {
         let mirrorURL = KeeBridgeConfig.vaultMirrorURLForApp()
+        let markerURL = KeeBridgeConfig.vaultMirrorLastWriteMarkerURLForApp()
         let fm = FileManager.default
         try fm.createDirectory(at: mirrorURL.deletingLastPathComponent(), withIntermediateDirectories: true)
+
+        if fm.fileExists(atPath: mirrorURL.path), mirrorChangedSinceLastAppWrite(mirrorURL: mirrorURL, markerURL: markerURL) {
+            let log = Logger(subsystem: "com.martintooming.KeeBridge", category: "app")
+            do {
+                let merged = try VaultService().mergeExtensionOriginatedPasskeys(
+                    fromMirrorAt: mirrorURL, intoSourceAt: source, rawKeyData: rawKeyData
+                )
+                if merged > 0 {
+                    log.notice("mirrorVaultToExtension: merged \(merged) extension-originated passkey(s) back into the source vault")
+                }
+            } catch {
+                log.error("mirrorVaultToExtension: merge-back failed, proceeding with mirror overwrite anyway: \(String(describing: error))")
+            }
+        }
+
         if fm.fileExists(atPath: mirrorURL.path) {
             try fm.removeItem(at: mirrorURL)
         }
         try fm.copyItem(at: source, to: mirrorURL)
+        recordLastAppWrite(mirrorURL: mirrorURL, markerURL: markerURL)
+    }
+
+    /// True when the mirror's current modification date doesn't match
+    /// what `recordLastAppWrite` recorded after this app's own last write
+    /// to it — i.e. something else touched the file since. `false`
+    /// (nothing to merge) whenever either date is unavailable: no marker
+    /// yet (first mirror ever, or it was deleted) has nothing to compare
+    /// against, and an unreadable mirror mtime means the merge attempt
+    /// below would fail anyway. A small tolerance absorbs sub-second
+    /// precision loss from the marker's text round-trip.
+    nonisolated private static func mirrorChangedSinceLastAppWrite(mirrorURL: URL, markerURL: URL) -> Bool {
+        guard let markerData = try? Data(contentsOf: markerURL),
+              let recordedString = String(data: markerData, encoding: .utf8),
+              let recorded = TimeInterval(recordedString.trimmingCharacters(in: .whitespacesAndNewlines)),
+              let actual = try? mirrorURL.resourceValues(forKeys: [.contentModificationDateKey]).contentModificationDate
+        else { return false }
+        return abs(actual.timeIntervalSince1970 - recorded) > 1.0
+    }
+
+    /// Records the mirror's OWN resulting modification date right after
+    /// this app just wrote it — not simply "now", since `copyItem` may
+    /// preserve `source`'s original date rather than stamping the copy
+    /// with the current time. Reading the mirror's actual post-write date
+    /// back keeps this self-consistent with what
+    /// `mirrorChangedSinceLastAppWrite` later compares it against,
+    /// regardless of which behavior `copyItem` actually has. Best-effort:
+    /// failing to record this just means the next call treats the mirror
+    /// as "changed" and does a (harmless, no-op) merge check.
+    nonisolated private static func recordLastAppWrite(mirrorURL: URL, markerURL: URL) {
+        guard let mtime = try? mirrorURL.resourceValues(forKeys: [.contentModificationDateKey]).contentModificationDate else { return }
+        try? Data(String(mtime.timeIntervalSince1970).utf8).write(to: markerURL, options: .atomic)
     }
 
     // MARK: - ASCredentialIdentityStore
