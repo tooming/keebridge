@@ -279,6 +279,91 @@ public struct VaultService: Sendable {
         return entry.passkeyPrivateKeyPEM?.withRevealedString { $0 }
     }
 
+    /// Merges passkey fields the extension wrote into its own vault MIRROR
+    /// copy back into the real, source-of-truth vault, before the app's
+    /// next mirror-refresh would otherwise silently clobber them. See
+    /// `docs/done/2026-08-31-passkey-registration-write-path-spike.md` for
+    /// why this exists: `KeeBridgeProvider`'s mirror is a throwaway copy
+    /// the app freely overwrites on every write, so anything the extension
+    /// itself wrote there (a freshly-registered passkey, eventually) must
+    /// be copied back into `sourceURL` BEFORE that next overwrite, or it's
+    /// lost for good.
+    ///
+    /// Deliberately narrow, NOT a general three-way merge: only copies
+    /// passkey fields from a mirror entry onto the matching-UUID source
+    /// entry, and only when the mirror's passkey credential ID differs
+    /// from (or is absent from) the source entry — every other field on
+    /// that entry (title, username, password, URL, notes, any other
+    /// custom field) is left exactly as the source vault already has it,
+    /// matching `setPasskey`'s own "touch only the five passkey fields"
+    /// contract. An entry present in the mirror but ABSENT from the
+    /// source (not possible yet — the extension has no way to create new
+    /// entries, only attach a passkey to an existing one — but defensively
+    /// skipped rather than assumed away) is ignored, never created.
+    ///
+    /// Both vaults are unlocked with the SAME key data — they're literal
+    /// copies of the same underlying vault at some point in time, never
+    /// independently-created databases. Returns the number of entries
+    /// actually merged (0, the common case, means nothing to do — no
+    /// write happens at all when nothing merged).
+    public func mergeExtensionOriginatedPasskeys(
+        fromMirrorAt mirrorURL: URL, intoSourceAt sourceURL: URL, rawKeyData: Data
+    ) throws -> Int {
+        try mergeExtensionOriginatedPasskeys(
+            fromMirrorAt: mirrorURL, intoSourceAt: sourceURL, unlock: UnlockData(rawKeyData: rawKeyData)
+        )
+    }
+
+    /// Same as `mergeExtensionOriginatedPasskeys(fromMirrorAt:intoSourceAt:rawKeyData:)`,
+    /// unlocking from a plaintext master password instead.
+    public func mergeExtensionOriginatedPasskeys(
+        fromMirrorAt mirrorURL: URL, intoSourceAt sourceURL: URL, masterPassword: String
+    ) throws -> Int {
+        try mergeExtensionOriginatedPasskeys(
+            fromMirrorAt: mirrorURL, intoSourceAt: sourceURL, unlock: UnlockData(masterPassword: masterPassword)
+        )
+    }
+
+    private func mergeExtensionOriginatedPasskeys(
+        fromMirrorAt mirrorURL: URL, intoSourceAt sourceURL: URL, unlock: UnlockData
+    ) throws -> Int {
+        let mirrorContent = try openContent(at: mirrorURL, unlock: unlock)
+        var sourceContent = try openContent(at: sourceURL, unlock: unlock)
+
+        var mergedCount = 0
+        func walk(_ group: KDBX.Group) {
+            for mirrorEntry in group.entries where mirrorEntry.isPasskey {
+                let uuid = "\(mirrorEntry.uuid)"
+                let sourceAlreadyMatches = Self.findEntry(in: sourceContent.database.root.group, uuid: uuid)?
+                    .passkeyCredentialID == mirrorEntry.passkeyCredentialID
+                guard !sourceAlreadyMatches,
+                      let relyingParty = mirrorEntry.passkeyRelyingParty,
+                      let credentialID = mirrorEntry.passkeyCredentialID,
+                      let privateKeyPEM = mirrorEntry.passkeyPrivateKeyPEM?.withRevealedString({ $0 })
+                else { continue }
+
+                let found = Self.mutateEntry(in: &sourceContent.database.root.group, uuid: uuid) { sourceEntry in
+                    sourceEntry.setPasskeyRelyingParty(relyingParty)
+                    sourceEntry.setPasskeyCredentialID(credentialID)
+                    sourceEntry.setPasskeyPrivateKeyPEM(privateKeyPEM)
+                    if let username = mirrorEntry.passkeyUsername { sourceEntry.setPasskeyUsername(username) }
+                    if let userHandle = mirrorEntry.passkeyUserHandle { sourceEntry.setPasskeyUserHandle(userHandle) }
+                    var times = sourceEntry.times ?? KDBX.Times()
+                    times.lastModificationTime = Date()
+                    sourceEntry.times = times
+                }
+                if found { mergedCount += 1 }
+            }
+            for child in group.groups { walk(child) }
+        }
+        walk(mirrorContent.database.root.group)
+
+        if mergedCount > 0 {
+            try write(sourceContent, unlock: unlock, to: sourceURL)
+        }
+        return mergedCount
+    }
+
     // MARK: - Writing (v2 — createVault/createEntry/updateEntry/deleteEntry)
 
     /// Fields for creating or editing a login-style entry. Deliberately the
