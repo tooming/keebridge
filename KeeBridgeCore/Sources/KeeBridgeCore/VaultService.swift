@@ -375,23 +375,27 @@ public struct VaultService: Sendable {
 
     // MARK: - Writing (v2 — createVault/createEntry/updateEntry/deleteEntry)
 
-    /// Fields for creating or editing a login-style entry. Deliberately the
-    /// same five fields `listEntries`/`revealField` already deal with —
-    /// card/note entry types stay KeePassXC-only for now (see the
-    /// secrets-management-UI plan's "first pass" scope).
+    /// Fields for creating or editing a login-style entry. `otpURI` maps to
+    /// KeePassXC's `otp` custom field; `nil` preserves it on an update, while
+    /// an empty string removes it.
     public struct EntryDraft: Sendable {
         public var title: String
         public var username: String
         public var password: String
         public var url: String
         public var notes: String
+        public var otpURI: String?
 
-        public init(title: String = "", username: String = "", password: String = "", url: String = "", notes: String = "") {
+        public init(
+            title: String = "", username: String = "", password: String = "", url: String = "",
+            notes: String = "", otpURI: String? = nil
+        ) {
             self.title = title
             self.username = username
             self.password = password
             self.url = url
             self.notes = notes
+            self.otpURI = otpURI
         }
     }
 
@@ -443,7 +447,7 @@ public struct VaultService: Sendable {
         return "\(newUUID)"
     }
 
-    /// Overwrites an existing entry's five standard fields (title/username/
+    /// Overwrites an existing entry's standard fields (title/username/
     /// password/url/notes) in place — full-replace semantics for THOSE
     /// fields specifically (an omitted `EntryDraft` field really does blank
     /// it out; callers that want "keep what wasn't specified" need their
@@ -476,13 +480,15 @@ public struct VaultService: Sendable {
     private func updateEntry(uuid: String, applying draft: EntryDraft, at url: URL, unlock: UnlockData) throws {
         var content = try openContent(at: url, unlock: unlock)
         let found = Self.mutateEntry(in: &content.database.root.group, uuid: uuid) { entry in
-            // Preserve every field this method doesn't know about (otp,
-            // KPEX_PASSKEY_*, anything else) — only the five standard
+            // Preserve every field this method doesn't know about (including
+            // KPEX_PASSKEY_* and custom fields) — only the standard
             // fields get the full-replace treatment. See this method's
             // public doc comment for why: replacing `entry.strings`
             // wholesale used to silently destroy a TOTP secret or a
             // passkey on every edit.
-            let preservedCustomFields = entry.strings.filter { !Self.standardKeys.contains($0.key) }
+            let preservedCustomFields = entry.strings.filter {
+                !Self.standardKeys.contains($0.key) && ($0.key != "otp" || draft.otpURI == nil)
+            }
             entry.strings = self.draftStrings(draft) + preservedCustomFields
             var times = entry.times ?? KDBX.Times()
             times.lastModificationTime = Date()
@@ -594,7 +600,7 @@ public struct VaultService: Sendable {
         }
         return EntryDraft(
             title: value("Title"), username: value("UserName"), password: value("Password"),
-            url: value("URL"), notes: value("Notes")
+            url: value("URL"), notes: value("Notes"), otpURI: value("otp")
         )
     }
 
@@ -628,7 +634,7 @@ public struct VaultService: Sendable {
 
     // MARK: - Write-side tree helpers
 
-    /// Builds the standard five-field `strings` array for an entry.
+    /// Builds an entry's standard strings plus an optional `otp` custom field.
     /// Password is `.unprotected` (despite the name — see
     /// `KDBX.ProtectedString.Value`'s doc comment: this is the case that
     /// gets written with `Protected="True"`, i.e. inner-cipher encrypted
@@ -636,13 +642,17 @@ public struct VaultService: Sendable {
     /// default). The rest are `.regular` (plaintext in the XML), matching
     /// standard KeePass/KeePassXC behavior for non-secret fields.
     private func draftStrings(_ draft: EntryDraft) -> [KDBX.ProtectedString] {
-        [
+        var strings = [
             KDBX.ProtectedString(key: "Title", value: .regular(draft.title)),
             KDBX.ProtectedString(key: "UserName", value: .regular(draft.username)),
             KDBX.ProtectedString(key: "Password", value: .unprotected(draft.password)),
             KDBX.ProtectedString(key: "URL", value: .regular(draft.url)),
             KDBX.ProtectedString(key: "Notes", value: .regular(draft.notes)),
         ]
+        if let otpURI = draft.otpURI, !otpURI.isEmpty {
+            strings.append(KDBX.ProtectedString(key: "otp", value: .unprotected(otpURI)))
+        }
+        return strings
     }
 
     private static func findEntry(in group: KDBX.Group, uuid: String) -> KDBX.Entry? {

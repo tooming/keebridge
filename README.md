@@ -7,7 +7,7 @@ Built as a personal replacement for a commercial password manager, with the expl
 ## What works today
 
 - **Passwords** — system-wide AutoFill via Safari's native "Log in as…" picker, backed by any `.kdbx` v3.1/4.0/4.1 vault
-- **TOTP / one-time codes** — RFC 6238, parses the `otpauth://` URI KeePassXC/Proton Pass store in an entry's `otp` field
+- **TOTP / one-time codes** — RFC 6238, scans setup QR codes or parses the `otpauth://` URI KeePassXC/Proton Pass store in an entry's `otp` field
 - **Vault write support** — create/edit/delete entries directly, from either the app's own UI or the headless `VaultProbe` CLI, not just via KeePassXC
 - **A real secrets-management UI** in the app itself — browse/search entries, reveal fields, edit, delete
 - **Passkeys (WebAuthn)** — sign in with an existing passkey, and register a brand-new one (both the interactive flow and, on macOS 15+, conditional/silent registration), backed by the vault's own KeePassXC-compatible passkey fields; visible read-only in both the app UI and `VaultProbe`. Still needs real-hardware verification (this project is built and validated headlessly, with no GUI or Touch ID hardware in CI) and carries a documented, unresolved Apple-side platform risk for third-party macOS passkey providers (AAGUID gets silently zeroed and the provider gets misreported as iCloud Keychain to the relying party) — see the issue tracker
