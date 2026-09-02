@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Unlock KeeBridge Cards</title>
+  <style>
+    body { margin: 0; background: #f3f3f3; color: #171717; font: 15px system-ui; }
+    main { width: min(420px, calc(100% - 32px)); margin: 12vh auto; padding: 24px;
+      box-sizing: border-box; border: 1px solid #bbb; border-radius: 12px; background: #fff; }
+    h1 { font-size: 21px; } input, button { width: 100%; box-sizing: border-box; padding: 10px;
+      margin-top: 10px; border: 1px solid #888; border-radius: 7px; font: inherit; }
+    button { cursor: pointer; background: #1769e0; color: #fff; border-color: #1769e0; }
+    #status { min-height: 1.3em; color: #555; }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>Unlock KeeBridge cards</h1>
+    <p>This is a private Safari extension page. Your vault password is sent only to KeeBridge's native handler and is not stored.</p>
+    <form id="unlock-form">
+      <input id="password" type="password" autocomplete="current-password" placeholder="Vault master password" required autofocus>
+      <button type="submit">Unlock</button>
+    </form>
+    <p id="status" role="status"></p>
+  </main>
+  <script src="unlock.js"></script>
+</body>
+</html>

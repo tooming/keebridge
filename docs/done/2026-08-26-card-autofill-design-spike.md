@@ -1,5 +1,11 @@
 # Credit card autofill: native-messaging vs. local-decrypt design spike
 
+> **Implemented September 2026.** `KeeBridgeCardExtension` now follows this
+> recommendation with a separate full-vault, read-only mirror, native local
+> decrypt, independent biometric Keychain item, and requested-field-only
+> responses. Conservative aliases cover common KeePass/Proton-style card
+> fields without treating a generic `number` alone, `PIN`, or login fields as cards.
+
 Answers the scoping question issue #3 and `ROADMAP.md` both flagged as blocking any
 implementation: how does the Safari Web Extension (new JS/TS code, a different tech
 stack than everything else in this repo) actually get card data out of the vault,
@@ -86,15 +92,14 @@ entries' field names actually are; that's a separate, still-open unknown this sp
 doesn't resolve) — but the *transport* question is now answered with a concrete,
 low-risk, already-proven mechanism instead of an open "needs design" note.
 
-## Still open
+## Open at the time of this spike (resolution)
 
-- The card field-name convention (needs the maintainer to check the real vault, or a
-  `VaultProbe list`-style inspection against it — outside this headless environment).
-- The actual Safari Web Extension target + content script (new JS/TS work, scoped as
-  its own future implementation item, not attempted here).
-- Re-confirm `SFSafariApplication.dispatchMessage`'s current behavior against whatever
-  Xcode version is in use when implementation starts (Apple Developer Forums thread
-  763879 flags recent changes there).
+- Field-name uncertainty is handled with normalized, conservative aliases for common
+  KeePass/Proton-style names; real-vault and browser UI verification remains manual.
+- The Safari Web Extension target, native handler, background script, and content
+  script now exist.
+- `SFSafariApplication.dispatchMessage` was unnecessary. JavaScript uses native
+  messaging on demand; the app supplies data through the dedicated file mirror.
 
 ## PR
 

@@ -1,0 +1,19 @@
+{
+  "manifest_version": 3,
+  "name": "KeeBridge Card AutoFill",
+  "version": "0.1",
+  "description": "Fills payment-card fields from your local KeeBridge vault.",
+  "permissions": ["nativeMessaging", "tabs"],
+  "host_permissions": ["<all_urls>"],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "content_scripts": [
+    {
+      "matches": ["<all_urls>"],
+      "js": ["content.js"],
+      "all_frames": true,
+      "run_at": "document_idle"
+    }
+  ]
+}
