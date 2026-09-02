@@ -187,6 +187,27 @@ private func tempVaultURL() -> URL {
     #expect(metadata?.credentialID == Data([0x01, 0x02]))
 }
 
+@Test func entryDraftRoundTripsOTPURI() throws {
+    let service = VaultService()
+    let url = tempVaultURL()
+    defer { try? FileManager.default.removeItem(at: url) }
+    try service.createVault(at: url, masterPassword: testPassword, databaseName: "Test Vault")
+
+    let otpURI = "otpauth://totp/Example:alice?secret=GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ"
+    let uuid = try service.createEntry(.init(title: "Example", otpURI: otpURI), at: url, masterPassword: testPassword)
+
+    #expect(try service.revealEntry(uuid: uuid, at: url, masterPassword: testPassword).otpURI == otpURI)
+    #expect(try service.currentTOTPCode(at: url, masterPassword: testPassword, entryUUID: uuid) != nil)
+
+    try service.updateEntry(uuid: uuid, applying: .init(title: "Renamed"), at: url, masterPassword: testPassword)
+    #expect(try service.revealEntry(uuid: uuid, at: url, masterPassword: testPassword).otpURI == otpURI)
+
+    try service.updateEntry(
+        uuid: uuid, applying: .init(title: "Updated", otpURI: ""), at: url, masterPassword: testPassword
+    )
+    #expect(try service.currentTOTPCode(at: url, masterPassword: testPassword, entryUUID: uuid) == nil)
+}
+
 @Test func updateEntryThrowsForUnknownUUID() throws {
     let service = VaultService()
     let url = tempVaultURL()
