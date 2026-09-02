@@ -177,9 +177,20 @@
       passkeys stay informational-only per the design spike's recommendation —
       reconstructing them (separate proprietary double-nested MessagePack format) is
       optional, riskier follow-up, not a blocker.
-- [ ] QR code scanning for adding a passkey (#7) — some sites offer a QR code to add a
-      passkey; KeeBridge should support scanning it. Depends on passkey support (#4)
-      existing first — not buildable until that lands.
+- [x] ~~QR code scanning for adding a passkey (#7)~~ — investigated now that passkey
+      support (#4) has landed, see
+      `docs/done/2026-09-01-passkey-qr-hybrid-transport-spike.md`. **Verdict: not
+      implementable**, not just hard-to-verify-headlessly — this is WebAuthn hybrid
+      transport (caBLE), which requires advertising raw CTAP2 BLE service data via
+      `CBPeripheralManager`, an API surface `CoreBluetooth` does not expose to
+      third-party apps on iOS/macOS at all (confirmed via Apple's own Developer Forums).
+      Same category of platform restriction as the AAGUID-zeroing finding from the
+      original passkey design spike — reserved for iCloud Keychain's own system-level
+      implementation, not something a third-party `ASCredentialProviderViewController`
+      extension can reach with any amount of entitlements or real-hardware testing.
+      KeeBridge's landed same-device assertion/registration flows already cover this
+      project's actual use case. Left a comment on #7 with this finding; not closed
+      automatically — that's the maintainer's call.
 - [x] ~~CLI tool feasibility spike (#9)~~ — done, see
       `docs/done/2026-08-26-cli-tool-feasibility-spike.md`. Verdict: feasible and cheap —
       `VaultProbe` already solves the hard parts (KeeBridgeCore integration, non-echoing
