@@ -51,6 +51,23 @@
       entries into the new extension target's container — a focused,
       `KeeBridgeCore`/app-side slice with no new JS yet. Still unresolved (needs the
       maintainer): the actual field-name convention the 9 real card entries use.
+- [ ] Automatic proposal of storing the password after logging into a new site (#33) —
+      investigated (STEP 6b refill, ROADMAP lane was otherwise empty this cycle), see
+      `docs/done/2026-09-02-save-password-proposal-feasibility-spike.md`.
+      **BLOCKED on Apple's platform, not on KeeBridge or this environment**: the API this
+      needs, `ASCredentialProviderViewController.prepareInterface(for: ASSavePasswordRequest)`/
+      `performWithoutUserInteractionIfPossible(savePasswordRequest:)`, is
+      `API_UNAVAILABLE(macos, tvos, watchos)` in Apple's own SDK — iOS/visionOS 26.2+
+      only, confirmed against Apple's `API_AVAILABLE`/`API_UNAVAILABLE` annotations (via
+      the `dotnet/macios` binding project, which mirrors them directly from Apple's
+      headers). `KeeBridgeProvider` is a native macOS extension, so there is currently no
+      macOS entry point to receive this callback at all — unlike every other
+      headless-verification caveat in this ROADMAP, this isn't about code KeeBridge could
+      write but this executor can't test; there is no code to write yet. The underlying
+      write path this feature would need (`VaultService.createEntry`) already exists.
+      Unlike the QR/hybrid-transport finding below, this one may become buildable later
+      if Apple ships a macOS counterpart — re-check next time `project.yml`'s
+      `MACOSX_DEPLOYMENT_TARGET` moves forward.
 - [x] ~~Passkey support: storage convention + platform-risk design spike (#4)~~ — done,
       see `docs/done/2026-08-26-passkey-design-spike.md`, **corrected next cycle**: the
       storage-convention finding there (a `webauthn.pem` file attachment) was wrong —
