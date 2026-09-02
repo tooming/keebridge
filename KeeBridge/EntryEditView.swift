@@ -149,7 +149,7 @@ private struct QRCodeCameraView: NSViewRepresentable {
 }
 
 @MainActor
-private final class QRCodeCameraPreview: NSView, AVCaptureMetadataOutputObjectsDelegate {
+private final class QRCodeCameraPreview: NSView, @MainActor AVCaptureMetadataOutputObjectsDelegate {
     private let session = AVCaptureSession()
     private let onCode: (String) -> Void
     private var didScan = false
