@@ -307,6 +307,22 @@
       end-to-end rather than just adding a nice-to-have — still needs a human eyeball to
       confirm on real hardware, same headless-verification limit every passkey item in
       this ROADMAP carries.
+- [x] ~~Fix `updateEntry` silently deleting an entry's TOTP/passkey fields on
+      every edit~~ — done, see
+      `docs/done/2026-09-02-update-entry-custom-field-data-loss-fix.md`. **Real data-loss
+      bug**, not a hypothetical: `VaultService.updateEntry` replaced `entry.strings`
+      wholesale with just the five standard fields (title/username/password/url/notes),
+      so editing ANY entry's title/username/etc. through the app's own Edit form, or the
+      CLI's `update` subcommand, silently deleted that entry's `otp` TOTP secret and/or
+      passkey (`KPEX_PASSKEY_*`) fields the moment it was saved. Present since write
+      support (#1) originally shipped, pre-executor; completely untested — `VaultProbe`'s
+      `update` reveal-then-merge only ever considered the five standard fields too, so it
+      never protected against this either. Fixed: `updateEntry` now preserves every field
+      it doesn't know about, only fully replacing the five standard ones (its documented
+      contract for those). New regression test
+      (`updateEntryPreservesPasskeyAndOtherCustomFields`) exercises this via the real
+      `setPasskey`/`updateEntry`/`passkeyMetadata` path. Discovered via a fresh, full read
+      of `VaultService.swift`'s write section — no run had read it end-to-end before.
 
 ## Needs maintainer/human action (not code)
 

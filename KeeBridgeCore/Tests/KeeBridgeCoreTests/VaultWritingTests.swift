@@ -149,6 +149,44 @@ private func tempVaultURL() -> URL {
     #expect(revealed.password == "new-pass")
 }
 
+@Test func updateEntryPreservesPasskeyAndOtherCustomFields() throws {
+    // Regression test: updateEntry used to replace entry.strings wholesale
+    // with just the five standard fields (title/username/password/url/
+    // notes), which silently deleted any OTHER field already on the entry
+    // — a TOTP `otp` secret, a passkey's `KPEX_PASSKEY_*` fields, anything
+    // — the moment that entry was edited through the app's own Edit form
+    // or the CLI's `update` subcommand. Neither of those callers'
+    // reveal-then-merge logic protected against this either, since both
+    // only ever considered the five standard fields. Exercises the fix via
+    // an existing custom-field write path (`setPasskey`) rather than
+    // poking at KDBXKit directly, since it's the real-world scenario this
+    // regressed.
+    let service = VaultService()
+    let url = tempVaultURL()
+    defer { try? FileManager.default.removeItem(at: url) }
+    try service.createVault(at: url, masterPassword: testPassword, databaseName: "Test Vault")
+
+    let uuid = try service.createEntry(.init(title: "Old", username: "old-user"), at: url, masterPassword: testPassword)
+    try service.setPasskey(
+        uuid: uuid, relyingParty: "example.com", credentialID: Data([0x01, 0x02]),
+        privateKeyPEM: "-----BEGIN PRIVATE KEY-----\nMOCK-NOT-A-REAL-KEY\n-----END PRIVATE KEY-----",
+        at: url, masterPassword: testPassword
+    )
+
+    let updated = VaultService.EntryDraft(title: "New", username: "new-user")
+    try service.updateEntry(uuid: uuid, applying: updated, at: url, masterPassword: testPassword)
+
+    let entries = try service.listEntries(at: url, masterPassword: testPassword)
+    #expect(entries.count == 1)
+    #expect(entries[0].title == "New")
+    #expect(entries[0].username == "new-user")
+    #expect(entries[0].isPasskey == true)
+
+    let metadata = try service.passkeyMetadata(at: url, masterPassword: testPassword, entryUUID: uuid)
+    #expect(metadata?.relyingParty == "example.com")
+    #expect(metadata?.credentialID == Data([0x01, 0x02]))
+}
+
 @Test func updateEntryThrowsForUnknownUUID() throws {
     let service = VaultService()
     let url = tempVaultURL()

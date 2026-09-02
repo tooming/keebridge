@@ -443,7 +443,22 @@ public struct VaultService: Sendable {
         return "\(newUUID)"
     }
 
-    /// Overwrites an existing entry's fields in place. Throws
+    /// Overwrites an existing entry's five standard fields (title/username/
+    /// password/url/notes) in place — full-replace semantics for THOSE
+    /// fields specifically (an omitted `EntryDraft` field really does blank
+    /// it out; callers that want "keep what wasn't specified" need their
+    /// own reveal-then-merge on top, same as `VaultProbe`'s `update`
+    /// subcommand does). Any OTHER field already on the entry — the `otp`
+    /// TOTP secret, the five `KPEX_PASSKEY_*` passkey fields, or any other
+    /// custom field — is preserved untouched. This was NOT always true: an
+    /// earlier version replaced `entry.strings` wholesale with just the
+    /// five standard fields, which meant editing an entry's title/username
+    /// through the app's own Edit form (or the CLI's `update`) would
+    /// silently DELETE that entry's TOTP secret and/or passkey the moment
+    /// it was saved — a real data-loss bug, not a hypothetical, and
+    /// completely untested until this fix (`VaultProbe`'s `update`
+    /// reveal-then-merge only ever considered the five standard fields
+    /// too, so it didn't protect against this either). Throws
     /// `.entryNotFound` if no entry with that UUID exists anywhere in the
     /// tree (searched recursively, same as `listEntries`/`revealField`).
     public func updateEntry(uuid: String, applying draft: EntryDraft, at url: URL, rawKeyData: Data) throws {
@@ -461,7 +476,14 @@ public struct VaultService: Sendable {
     private func updateEntry(uuid: String, applying draft: EntryDraft, at url: URL, unlock: UnlockData) throws {
         var content = try openContent(at: url, unlock: unlock)
         let found = Self.mutateEntry(in: &content.database.root.group, uuid: uuid) { entry in
-            entry.strings = self.draftStrings(draft)
+            // Preserve every field this method doesn't know about (otp,
+            // KPEX_PASSKEY_*, anything else) — only the five standard
+            // fields get the full-replace treatment. See this method's
+            // public doc comment for why: replacing `entry.strings`
+            // wholesale used to silently destroy a TOTP secret or a
+            // passkey on every edit.
+            let preservedCustomFields = entry.strings.filter { !Self.standardKeys.contains($0.key) }
+            entry.strings = self.draftStrings(draft) + preservedCustomFields
             var times = entry.times ?? KDBX.Times()
             times.lastModificationTime = Date()
             entry.times = times
