@@ -139,7 +139,7 @@ final class VaultController: ObservableObject {
                     self.cachedContent = content
                     self.entries = entries
                     self.lastRefreshDate = Date()
-                    self.populateIdentityStore(entries: entries)
+                    self.populateIdentityStore(entries: entries, content: content)
                     self.startWatching()
                 }
             } catch {
@@ -203,7 +203,7 @@ final class VaultController: ObservableObject {
                     self.cachedContent = content
                     self.entries = entries
                     self.lastRefreshDate = Date()
-                    self.populateIdentityStore(entries: entries)
+                    self.populateIdentityStore(entries: entries, content: content)
                 }
             } catch {
                 await MainActor.run { [weak self] in
@@ -293,7 +293,7 @@ final class VaultController: ObservableObject {
                     self.cachedContent = content
                     self.entries = entries
                     self.lastRefreshDate = Date()
-                    self.populateIdentityStore(entries: entries)
+                    self.populateIdentityStore(entries: entries, content: content)
                 }
             } catch {
                 await MainActor.run { [weak self] in
@@ -319,7 +319,7 @@ final class VaultController: ObservableObject {
                     self.cachedContent = content
                     self.entries = entries
                     self.lastRefreshDate = Date()
-                    self.populateIdentityStore(entries: entries)
+                    self.populateIdentityStore(entries: entries, content: content)
                 }
             } catch {
                 await MainActor.run { [weak self] in
@@ -345,7 +345,7 @@ final class VaultController: ObservableObject {
                     self.cachedContent = content
                     self.entries = entries
                     self.lastRefreshDate = Date()
-                    self.populateIdentityStore(entries: entries)
+                    self.populateIdentityStore(entries: entries, content: content)
                 }
             } catch {
                 await MainActor.run { [weak self] in
@@ -472,7 +472,11 @@ final class VaultController: ObservableObject {
 
     // MARK: - ASCredentialIdentityStore
 
-    private func populateIdentityStore(entries: [VaultLoginEntry]) {
+    /// `content` is needed only to look up each passkey-bearing entry's
+    /// relying party/credential ID/user handle (`VaultService.passkeyMetadata`
+    /// — pure in-memory, no Argon2/I/O) — every call site already has it in
+    /// scope from the same `openVault`/mirror step that produced `entries`.
+    private func populateIdentityStore(entries: [VaultLoginEntry], content: KDBXContent) {
         let store = ASCredentialIdentityStore.shared
         store.getState { [weak self] state in
             guard let self else { return }
@@ -507,9 +511,42 @@ final class VaultController: ObservableObject {
                 )
             }
 
-            let identities: [ASCredentialIdentity] = passwordIdentities + otpIdentities
+            // Passkey-bearing entries, likewise. Previously missing
+            // entirely: `CredentialProviderViewController.completePasskeyAssertion`
+            // has been able to sign an assertion since the assertion-wiring
+            // ROADMAP item landed, but without a matching identity
+            // registered here, the system has no way to know KeeBridge
+            // holds a passkey for a given relying party/credential ID in
+            // the first place, so it could never actually route an
+            // `ASPasskeyCredentialRequest` to this app for one — same
+            // requirement real third-party credential providers document
+            // ("without this, iOS won't offer our credential provider
+            // during sign-in") and the same thing Proton Pass's own macOS
+            // credential provider does for its passkeys. `userHandle` is
+            // non-optional on `ASPasskeyCredentialIdentity`, so an entry
+            // missing it (shouldn't happen for anything this app itself
+            // registered, but the 9 informational-only Proton-Pass-carried
+            // passkeys never got real key material at all) is skipped
+            // rather than guessed at.
+            let passkeyIdentities: [ASPasskeyCredentialIdentity] = entries.compactMap { (entry) -> ASPasskeyCredentialIdentity? in
+                guard entry.isPasskey,
+                      let metadata = self.vaultService.passkeyMetadata(in: content, entryUUID: entry.uuid),
+                      let relyingParty = metadata.relyingParty,
+                      let credentialID = metadata.credentialID,
+                      let userHandle = metadata.userHandle
+                else { return nil }
+                return ASPasskeyCredentialIdentity(
+                    relyingPartyIdentifier: relyingParty,
+                    userName: metadata.username ?? entry.username,
+                    credentialID: credentialID,
+                    userHandle: userHandle,
+                    recordIdentifier: entry.uuid
+                )
+            }
+
+            let identities: [ASCredentialIdentity] = passwordIdentities + otpIdentities + passkeyIdentities
             let registeredCount = identities.count
-            self.log.notice("registering \(passwordIdentities.count) password identities + \(otpIdentities.count) OTP identities")
+            self.log.notice("registering \(passwordIdentities.count) password identities + \(otpIdentities.count) OTP identities + \(passkeyIdentities.count) passkey identities")
 
             store.replaceCredentialIdentities(identities) { success, error in
                 self.log.notice("replaceCredentialIdentities: success=\(success), count=\(registeredCount), error=\(error.map(String.init(describing:)) ?? "nil", privacy: .public)")

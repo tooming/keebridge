@@ -262,6 +262,7 @@ struct PasskeyCommand: ParsableCommand {
         let relyingParty: String?
         let username: String?
         let credentialID: String?
+        let userHandle: String?
     }
 
     @OptionGroup var vault: VaultPathArguments
@@ -290,12 +291,14 @@ struct PasskeyCommand: ParsableCommand {
                 uuid: entryUUID,
                 relyingParty: metadata.relyingParty,
                 username: metadata.username,
-                credentialID: metadata.credentialID?.base64EncodedString()
+                credentialID: metadata.credentialID?.base64EncodedString(),
+                userHandle: metadata.userHandle?.base64EncodedString()
             ))
         } else {
             print("Relying party: \(metadata.relyingParty ?? "(none)")")
             print("Username:      \(metadata.username ?? "(none)")")
             print("Credential ID: \(metadata.credentialID?.base64EncodedString() ?? "(none)")")
+            print("User handle:   \(metadata.userHandle?.base64EncodedString() ?? "(none)")")
         }
     }
 }

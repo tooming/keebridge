@@ -287,6 +287,26 @@
       passkey support. "What works today"/"What's planned" rewritten to match reality;
       "What's planned" now just points at `ROADMAP.md` plus the one genuinely-remaining
       item (credit card autofill). Docs-only, no code changed.
+- [x] ~~Register passkey identities in `ASCredentialIdentityStore` (#4)~~ — done, see
+      `docs/done/2026-09-02-passkey-identity-store-registration.md`. Discovered via a
+      fresh, full read of `VaultController.swift` — a file previously read only in part.
+      `populateIdentityStore` registered password and OTP identities but, despite several
+      cycles of shipped passkey assertion/registration code, never any
+      `ASPasskeyCredentialIdentity` — meaning the system had no way to know KeeBridge holds
+      a passkey for a given site at all, so it could never route a WebAuthn assertion
+      request to this app for one. Confirmed via real third-party credential-provider
+      source (including Proton Pass's own macOS `AutoFillEngine`) that registering these
+      identities is the standard, necessary mechanism, not optional polish. Fixed:
+      `populateIdentityStore` now also builds one `ASPasskeyCredentialIdentity` per
+      passkey-bearing entry (relying party/username/credential ID/user handle, via a
+      `VaultService.passkeyMetadata` lookup — no new secret exposure, `userHandle` is
+      WebAuthn-opaque non-PII metadata by spec, same classification as `credentialID`).
+      `VaultService.VaultPasskeyMetadata` gained the `userHandle` field this needed
+      (previously only exposed relying party/username/credential ID); `VaultProbe`'s
+      `passkey` subcommand shows it too, for parity. Likely fixes passkey sign-in
+      end-to-end rather than just adding a nice-to-have — still needs a human eyeball to
+      confirm on real hardware, same headless-verification limit every passkey item in
+      this ROADMAP carries.
 
 ## Needs maintainer/human action (not code)
 
