@@ -270,6 +270,15 @@
       real Safari + a real relying party + real hardware to trigger at all — flagged as a
       "still needs a human eyeball" caveat in the PR, same as the interactive registration
       item.
+- [x] ~~Passkey visibility in `VaultProbe` (the CLI tool)~~ — done, see
+      `docs/done/2026-09-02-vaultprobe-passkey-visibility.md`. Discovered via a STEP 6b
+      re-survey: `VaultProbe` had zero passkey awareness — the same gap the app's own UI
+      had before it (#4's earlier "visibility" item), just in the CLI instead. `list` now
+      marks passkey-bearing entries (`isPasskey` in `--json`, a `[passkey]` marker in the
+      text output); a new `passkey <uuid>` subcommand prints relying party/username/
+      credential ID — never the private key, same read-only scope
+      `VaultService.revealPasskeyPrivateKeyPEM` is deliberately excluded from here too.
+      Seven subcommands now (`list`/`reveal`/`totp`/`passkey`/`create`/`update`/`delete`).
 
 ## Needs maintainer/human action (not code)
 
