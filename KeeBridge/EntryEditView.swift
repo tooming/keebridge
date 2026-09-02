@@ -148,6 +148,7 @@ private struct QRCodeCameraView: NSViewRepresentable {
     func updateNSView(_ nsView: QRCodeCameraPreview, context: Context) {}
 }
 
+@MainActor
 private final class QRCodeCameraPreview: NSView, AVCaptureMetadataOutputObjectsDelegate {
     private let session = AVCaptureSession()
     private let onCode: (String) -> Void
