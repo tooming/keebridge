@@ -1,15 +1,28 @@
 # [Action needed] Every remaining `ROADMAP.md` item needs maintainer input, not more code
 
-This run (2026-09-02) landed 4 PRs this cycle (a WebAuthn credential-ID primitive, full
-passkey registration wiring, a QR/hybrid-transport feasibility spike, an
-automatic-password-save feasibility spike) plus one more discovered mid-run (passkey
-visibility in the app's own UI). After all of that, every remaining unchecked item in
-`ROADMAP.md`'s "Now / next" lane is genuinely blocked on something this executor cannot
-resolve by writing more code — not a shortage of effort, a real external dependency each
-one is waiting on. Re-surveyed open issues (`gh issue list` equivalent), grepped for
-TODO/FIXME (none), and did a fresh read of every remaining unexamined app source file
-(`EntryEditView.swift`, `ContentView.swift`, `LockedView.swift`, `KeeBridgeApp.swift`) —
-nothing new turned up. Per STEP 6b: an honest status update beats fabricating make-work.
+**Updated 2026-09-02 (later the same day)**: since this file was first filed, a *second*
+executor run picked up where the first left off and found four more genuinely new,
+buildable things this backlog had missed — conditional/silent passkey registration
+(`performWithoutUserInteractionIfPossible(passkeyRegistration:)`, #4), passkey visibility
+in `VaultProbe` (the CLI), and a `README.md` accuracy refresh (on top of finishing the
+first run's own stale, unmerged self-review). None of that invalidates this file's core
+finding, though — after all of that *additional* work, a fresh re-survey (same method:
+open issues, TODO/FIXME grep, a re-read of every previously-unexamined source file) still
+turns up nothing further. The four items below remain exactly as blocked as when this file
+was first written; only the "how much has already shipped" framing needed updating.
+
+Original framing, still accurate: this run landed several PRs (a WebAuthn credential-ID
+primitive, full passkey registration wiring, a QR/hybrid-transport feasibility spike, an
+automatic-password-save feasibility spike, passkey visibility in the app's own UI) before
+this file was first written, and several more since (conditional passkey registration,
+`VaultProbe` passkey visibility, the README refresh). After all of that, every remaining
+unchecked item in `ROADMAP.md`'s "Now / next" lane is genuinely blocked on something this
+executor cannot resolve by writing more code — not a shortage of effort, a real external
+dependency each one is waiting on. Re-surveyed open issues (unchanged since first written),
+grepped for TODO/FIXME (still none), and re-read every previously-unexamined file,
+including this run's own newly-touched ones (`VaultProbe.swift`, `KeeBridgeConfig.swift`,
+`EntryEditView.swift`, `README.md` itself) — nothing new turned up this time. Per STEP 6b:
+an honest status update beats fabricating make-work.
 
 ## What's blocked, and what would unblock each one
 
@@ -58,10 +71,12 @@ nothing new turned up. Per STEP 6b: an honest status update beats fabricating ma
 Worth calling out explicitly since it's been the bulk of this ROADMAP's recent work: the
 core passkey feature (storage convention, read/write metadata, P-256 crypto primitives,
 COSE encoding, `authenticatorData`/`attestationObject`, credential ID generation,
-assertion/sign-in, registration, extension→app write-back safety, and now read-only
-visibility in the app's own UI) is done. What remains passkey-adjacent (QR/hybrid-transport,
-the 9 Proton-Pass-carried passkeys' proprietary format) is either permanently blocked (item
-4 above) or explicitly optional/lower-priority per the original design spike's own
+assertion/sign-in, both interactive AND conditional/silent registration, extension→app
+write-back safety, and read-only visibility in both the app's own UI and the `VaultProbe`
+CLI) is done — and `README.md` now says so accurately instead of still listing it as
+future work. What remains passkey-adjacent (QR/hybrid-transport, the 9
+Proton-Pass-carried passkeys' proprietary format) is either permanently blocked (item 4
+above) or explicitly optional/lower-priority per the original design spike's own
 recommendation — not release-blocking.
 
 **Everything shipped this cycle still carries its own "needs a human eyeball" caveat** —
