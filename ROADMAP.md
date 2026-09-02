@@ -279,6 +279,14 @@
       credential ID — never the private key, same read-only scope
       `VaultService.revealPasskeyPrivateKeyPEM` is deliberately excluded from here too.
       Seven subcommands now (`list`/`reveal`/`totp`/`passkey`/`create`/`update`/`delete`).
+- [x] ~~README accuracy refresh~~ — done, see
+      `docs/done/2026-09-02-readme-accuracy-refresh.md`. Discovered via a STEP 6b
+      re-survey: `README.md`'s "What's planned" still listed vault write support and the
+      secrets-management UI as future work — both closed before this executor's first run
+      — and described passkeys as pure future work too, despite many cycles of shipped
+      passkey support. "What works today"/"What's planned" rewritten to match reality;
+      "What's planned" now just points at `ROADMAP.md` plus the one genuinely-remaining
+      item (credit card autofill). Docs-only, no code changed.
 
 ## Needs maintainer/human action (not code)
 
