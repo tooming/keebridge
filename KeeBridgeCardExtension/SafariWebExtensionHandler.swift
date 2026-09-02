@@ -15,10 +15,10 @@ final class SafariWebExtensionHandler: NSObject, NSExtensionRequestHandling {
         label: "com.martintooming.KeeBridge.CardExtension.work",
         qos: .userInitiated
     )
-    private static var cachedPreHash: Data?
-    private static var cachedContent: KDBXContent?
-    private static var cachedContentDate: Date?
-    private static var cachedMirrorDate: Date?
+    private var cachedPreHash: Data?
+    private var cachedContent: KDBXContent?
+    private var cachedContentDate: Date?
+    private var cachedMirrorDate: Date?
     private static let cacheTTL: TimeInterval = 5 * 60
 
     func beginRequest(with context: NSExtensionContext) {
@@ -97,10 +97,10 @@ final class SafariWebExtensionHandler: NSObject, NSExtensionRequestHandling {
 
     private func unlockedContent(at url: URL, password: String?) throws -> KDBXContent? {
         let mirrorDate = try? url.resourceValues(forKeys: [.contentModificationDateKey]).contentModificationDate
-        if let content = Self.cachedContent,
-           let cachedAt = Self.cachedContentDate,
+        if let content = cachedContent,
+           let cachedAt = cachedContentDate,
            Date().timeIntervalSince(cachedAt) < Self.cacheTTL,
-           mirrorDate == Self.cachedMirrorDate {
+           mirrorDate == cachedMirrorDate {
             return content
         }
 
@@ -117,7 +117,7 @@ final class SafariWebExtensionHandler: NSObject, NSExtensionRequestHandling {
             } catch {
                 throw error
             }
-        } else if let cached = Self.cachedPreHash {
+        } else if let cached = cachedPreHash {
             preHash = cached
         } else {
             do {
@@ -140,7 +140,7 @@ final class SafariWebExtensionHandler: NSObject, NSExtensionRequestHandling {
             cache(content: content, preHash: preHash, mirrorDate: mirrorDate)
             return content
         } catch {
-            Self.cachedPreHash = nil
+            cachedPreHash = nil
             keychainOnMain {
                 keychain.delete(account: KeeBridgeConfig.cardExtensionKeychainAccount)
             }
@@ -149,10 +149,10 @@ final class SafariWebExtensionHandler: NSObject, NSExtensionRequestHandling {
     }
 
     private func cache(content: KDBXContent, preHash: Data, mirrorDate: Date?) {
-        Self.cachedContent = content
-        Self.cachedContentDate = Date()
-        Self.cachedMirrorDate = mirrorDate
-        Self.cachedPreHash = preHash
+        cachedContent = content
+        cachedContentDate = Date()
+        cachedMirrorDate = mirrorDate
+        cachedPreHash = preHash
     }
 
     private func keychainOnMain<T>(_ operation: () throws -> T) rethrows -> T {
