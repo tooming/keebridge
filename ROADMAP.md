@@ -247,6 +247,29 @@
       party/username/credential ID, never the private key) plus a small icon on
       passkey-bearing rows in `VaultBrowserView`'s list. No new write path — creating/using
       passkeys stays the credential provider extension's job (#4).
+- [x] ~~Conditional (silent/background) passkey registration (#4)~~ — done, see
+      `docs/done/2026-09-02-conditional-passkey-registration.md`. Discovered via a STEP 6b
+      re-survey: the interactive registration PR's header comment had flagged
+      `performWithoutUserInteractionIfPossible(passkeyRegistration:)`/
+      `SupportsConditionalPasskeyRegistration` as a deliberately-deferred, "still-unclaimed"
+      capability, not a permanently-out-of-scope one. Confirmed via Apple's DocC JSON API
+      (macOS 15.0+, matching `project.yml`'s deployment target already) and cross-checked
+      against Dashlane's own shipped implementation
+      (`github.com/Dashlane/apple-apps`) for the exact override signature
+      (`ASPasskeyCredentialRequest`, not the more general `ASCredentialRequest` the
+      interactive override takes). `CredentialProviderViewController` now overrides it,
+      conservatively: registers only when the vault is already unlocked in memory (never
+      attempts Keychain/Touch ID — no UI is permitted in this path at all), exactly one
+      vault entry's URL host matches the relying party ID, and that entry has no passkey
+      yet; anything else cancels with `.userInteractionRequired` so the system falls back
+      to the normal interactive flow. Reuses the existing `completePasskeyRegistration`
+      write path unchanged. Extracted the host-matching filter (`matchingEntries`) so the
+      interactive and conditional flows share one implementation instead of two copies.
+      **Genuinely unverifiable headlessly, more so than the interactive flow**: this path
+      only ever fires from a real site's conditional-mediation WebAuthn call, which needs
+      real Safari + a real relying party + real hardware to trigger at all — flagged as a
+      "still needs a human eyeball" caveat in the PR, same as the interactive registration
+      item.
 
 ## Needs maintainer/human action (not code)
 
