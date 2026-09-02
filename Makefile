@@ -7,7 +7,7 @@ test: ## Run the KeeBridgeCore Swift package test suite (no signing needed)
 	@cd KeeBridgeCore && swift test
 
 .PHONY: build
-build: ## Unsigned build of the KeeBridge app (embeds KeeBridgeProvider) — the CI-safe gate; a real signed build needs Xcode + the dev cert locally
+build: ## Unsigned build of the app (embeds credential + card extensions) — CI-safe; signed builds need Xcode + the dev cert
 	@xcodebuild -project KeeBridge.xcodeproj -scheme KeeBridge -configuration Debug -destination 'platform=macOS' CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO build
 
 .PHONY: probe-build

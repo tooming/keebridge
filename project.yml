@@ -37,6 +37,8 @@ targets:
     dependencies:
       - target: KeeBridgeProvider
         embed: true
+      - target: KeeBridgeCardExtension
+        embed: true
       - package: KeeBridgeCore
 
   KeeBridgeProvider:
@@ -72,6 +74,42 @@ targets:
             ASCredentialProviderExtensionCapabilities:
               ProvidesPasswords: true
               ProvidesOneTimeCodes: true
+    dependencies:
+      - package: KeeBridgeCore
+
+  KeeBridgeCardExtension:
+    type: app-extension
+    platform: macOS
+    sources:
+      - path: KeeBridgeCardExtension
+        excludes:
+          - Resources
+    resources:
+      - path: KeeBridgeCardExtension/Resources
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.martintooming.KeeBridge.CardExtension
+        MARKETING_VERSION: "0.1"
+        CURRENT_PROJECT_VERSION: "1"
+        DEVELOPMENT_TEAM: M2KQ698ZS5
+        CODE_SIGN_STYLE: Automatic
+        ENABLE_APP_SANDBOX: YES
+        APPLICATION_EXTENSION_API_ONLY: YES
+        SWIFT_VERSION: "6.1"
+        MACOSX_DEPLOYMENT_TARGET: "15.0"
+        GENERATE_INFOPLIST_FILE: YES
+        SKIP_INSTALL: YES
+    entitlements:
+      path: KeeBridgeCardExtension/KeeBridgeCardExtension.entitlements
+      properties:
+        com.apple.security.app-sandbox: true
+    info:
+      path: KeeBridgeCardExtension/Info.plist
+      properties:
+        CFBundleDisplayName: KeeBridge Card AutoFill
+        NSExtension:
+          NSExtensionPointIdentifier: com.apple.Safari.web-extension
+          NSExtensionPrincipalClass: $(PRODUCT_MODULE_NAME).SafariWebExtensionHandler
     dependencies:
       - package: KeeBridgeCore
 

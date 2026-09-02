@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: MIT
 //
 // Single source of truth for identifiers shared across the KeeBridge app,
-// the KeeBridgeProvider extension, and project.yml (which must be kept in
+// the KeeBridgeProvider/Safari extensions, and project.yml (which must be kept in
 // sync with these strings by hand — Xcode entitlements/Info.plist can't
 // reference Swift constants).
 //
@@ -35,6 +35,14 @@ public enum KeeBridgeConfig {
     /// project.yml.
     public static let providerBundleID = "com.martintooming.KeeBridge.Provider"
 
+    /// Must match KeeBridgeCardExtension's PRODUCT_BUNDLE_IDENTIFIER.
+    public static let cardExtensionBundleID = "com.martintooming.KeeBridge.CardExtension"
+
+    /// The Safari extension deliberately uses a distinct item even though
+    /// default Keychain access groups already isolate extension processes.
+    public static let cardExtensionKeychainService = "com.martintooming.keebridge.card-extension.vaultkey"
+    public static let cardExtensionKeychainAccount = "personal-vault-card-extension"
+
     public static let vaultMirrorFilename = "vault.kdbx"
 
     /// Where the (unsandboxed) app writes the vault mirror: the
@@ -44,6 +52,19 @@ public enum KeeBridgeConfig {
     public static func vaultMirrorURLForApp() -> URL {
         URL(fileURLWithPath: NSHomeDirectory())
             .appendingPathComponent("Library/Containers/\(providerBundleID)/Data/\(vaultMirrorFilename)")
+    }
+
+    /// Separate, read-only mirror for the Safari Web Extension. It must never
+    /// participate in the credential provider's passkey write-back merge.
+    public static func cardVaultMirrorURLForApp() -> URL {
+        URL(fileURLWithPath: NSHomeDirectory())
+            .appendingPathComponent("Library/Containers/\(cardExtensionBundleID)/Data/\(vaultMirrorFilename)")
+    }
+
+    /// The Safari Web Extension's view of its own read-only mirror.
+    public static func cardVaultMirrorURLForExtension() -> URL {
+        URL(fileURLWithPath: NSHomeDirectory())
+            .appendingPathComponent(vaultMirrorFilename)
     }
 
     /// Where the (sandboxed) extension reads the vault mirror from: its

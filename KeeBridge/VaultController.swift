@@ -4,7 +4,7 @@
 // Owns the container app's side of the AutoFill flow: picking the vault
 // file, unlocking with the master password, caching the pre-hash in this
 // app's own (unshared — see KeychainStore) Keychain item, mirroring the
-// vault directly into the extension's sandbox container (see
+// vault directly into each extension's sandbox container (see
 // KeeBridgeConfig.vaultMirrorURLForApp — that's what the sandboxed
 // extension actually reads; this app reads the real Google-Drive-synced
 // file directly, since it's deliberately unsandboxed), and pushing entries
@@ -127,8 +127,8 @@ final class VaultController: ObservableObject {
                 let entries = vaultService.listEntries(in: content)
                 let preHash = vaultService.preHashKeyData(forPassword: password)
                 try keychain.store(preHash)
-                try Self.mirrorVaultToExtension(from: vaultURL, rawKeyData: preHash)
-                log.notice("unlock: succeeded, \(entries.count) entries, mirror written to \(KeeBridgeConfig.vaultMirrorURLForApp().path, privacy: .public)")
+                try Self.mirrorVaultToExtensions(from: vaultURL, rawKeyData: preHash)
+                log.notice("unlock: succeeded, \(entries.count) entries, provider and card mirrors written")
 
                 await MainActor.run { [weak self] in
                     guard let self else { return }
@@ -194,7 +194,7 @@ final class VaultController: ObservableObject {
                 // auto-refresh) that's supposed to pick up external edits.
                 let content = try vaultService.openVault(at: vaultURL, rawKeyData: preHash)
                 let entries = vaultService.listEntries(in: content)
-                try Self.mirrorVaultToExtension(from: vaultURL, rawKeyData: preHash)
+                try Self.mirrorVaultToExtensions(from: vaultURL, rawKeyData: preHash)
 
                 await MainActor.run { [weak self] in
                     guard let self else { return }
@@ -286,7 +286,7 @@ final class VaultController: ObservableObject {
                 _ = try vaultService.createEntry(draft, at: vaultURL, rawKeyData: preHash)
                 let content = try vaultService.openVault(at: vaultURL, rawKeyData: preHash)
                 let entries = vaultService.listEntries(in: content)
-                try Self.mirrorVaultToExtension(from: vaultURL, rawKeyData: preHash)
+                try Self.mirrorVaultToExtensions(from: vaultURL, rawKeyData: preHash)
                 await MainActor.run { [weak self] in
                     guard let self else { return }
                     self.isWorking = false
@@ -312,7 +312,7 @@ final class VaultController: ObservableObject {
                 try vaultService.updateEntry(uuid: uuid, applying: draft, at: vaultURL, rawKeyData: preHash)
                 let content = try vaultService.openVault(at: vaultURL, rawKeyData: preHash)
                 let entries = vaultService.listEntries(in: content)
-                try Self.mirrorVaultToExtension(from: vaultURL, rawKeyData: preHash)
+                try Self.mirrorVaultToExtensions(from: vaultURL, rawKeyData: preHash)
                 await MainActor.run { [weak self] in
                     guard let self else { return }
                     self.isWorking = false
@@ -338,7 +338,7 @@ final class VaultController: ObservableObject {
                 try vaultService.deleteEntry(uuid: uuid, at: vaultURL, rawKeyData: preHash)
                 let content = try vaultService.openVault(at: vaultURL, rawKeyData: preHash)
                 let entries = vaultService.listEntries(in: content)
-                try Self.mirrorVaultToExtension(from: vaultURL, rawKeyData: preHash)
+                try Self.mirrorVaultToExtensions(from: vaultURL, rawKeyData: preHash)
                 await MainActor.run { [weak self] in
                     guard let self else { return }
                     self.isWorking = false
@@ -437,6 +437,26 @@ final class VaultController: ObservableObject {
         }
         try fm.copyItem(at: source, to: mirrorURL)
         recordLastAppWrite(mirrorURL: mirrorURL, markerURL: markerURL)
+    }
+
+    /// Mirrors the real source into both extension containers. The card
+    /// extension is strictly read-only, so its mirror intentionally has no
+    /// modification marker and never enters the provider's passkey merge
+    /// path. Copying the source (rather than the provider mirror) also means
+    /// a Safari-side file change can never be mistaken for passkey write-back.
+    nonisolated private static func mirrorVaultToExtensions(from source: URL, rawKeyData: Data) throws {
+        try mirrorVaultToExtension(from: source, rawKeyData: rawKeyData)
+
+        let cardMirrorURL = KeeBridgeConfig.cardVaultMirrorURLForApp()
+        let fm = FileManager.default
+        try fm.createDirectory(
+            at: cardMirrorURL.deletingLastPathComponent(),
+            withIntermediateDirectories: true
+        )
+        if fm.fileExists(atPath: cardMirrorURL.path) {
+            try fm.removeItem(at: cardMirrorURL)
+        }
+        try fm.copyItem(at: source, to: cardMirrorURL)
     }
 
     /// True when the mirror's current modification date doesn't match

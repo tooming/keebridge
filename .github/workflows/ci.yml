@@ -1,7 +1,7 @@
 name: ci
 
 # The only gate this repo has: swift test (KeeBridgeCore, no signing needed) + an
-# unsigned xcodebuild build (KeeBridge, embeds KeeBridgeProvider) + a swift build
+# unsigned xcodebuild build (KeeBridge, embeds both extensions) + a swift build
 # of VaultProbe (its own SPM package, not part of the Xcode project) + the
 # routines/ drift checks. Runs on macos-latest since swift/xcodebuild need a real
 # macOS toolchain — there's no clusterless/Linux-only split like the sibling

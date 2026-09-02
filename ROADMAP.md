@@ -12,7 +12,7 @@
 - One item per PR, branch prefix `auto/*`, target < ~400 changed lines. Split an
   oversized item into a groomed follow-up entry instead of one giant PR.
 - `make ci` (`swift test` against KeeBridgeCore + an unsigned `xcodebuild` build of the
-  KeeBridge/KeeBridgeProvider targets + routines drift checks) green is necessary, not
+  app and both extension targets + routines drift checks) green is necessary, not
   sufficient — the self-review checklist (gate integrity, secret hygiene,
   crypto/entitlements integrity) is the real gate for this repo's specific risks.
 - **Headless only.** No GUI, no Touch ID hardware in the executor's environment. Anything
@@ -32,25 +32,12 @@
       needed (this team's provisioning doesn't reliably grant one anyway, per
       `README.md`). `browser.runtime.connectNative`/`SFSafariApplication.dispatchMessage`
       stay available for lock-state signaling, not for shuttling card data itself.
-- [ ] Credit card autofill implementation (#3) — the actual Safari Web Extension target
-      (new JS/TS tech stack: content script + background script +
-      `SafariWebExtensionHandler` native handler), built on the design spike above.
-      **Blocked in this executor's environment**: this needs a brand-new Xcode target,
-      and there's no `xcodegen` binary here to regenerate `KeeBridge.xcodeproj` from
-      `project.yml` after adding one — confirmed 2026-08-26 (`which xcodegen` → nothing).
-      The checked-in `project.pbxproj` uses the classic explicit
-      `PBXFileReference`/`PBXBuildFile` format (no modern synchronized-folder groups —
-      grepped, zero matches), so hand-adding a whole new target's build phases by
-      editing that file directly, with no way to validate the result short of a real
-      Xcode install, is a correctness risk not worth taking headless. Content edits to
-      *existing* targets' files (Swift sources, `Info.plist`, entitlements) remain
-      safe and unaffected by this — see the passkey item below, which needs none of
-      that. Once `xcodegen` is available in this environment (or a human adds the
-      target once, by hand, in real Xcode), scope for the first PR: extend the app's
-      existing mirroring (`mirrorVaultToExtension`'s sibling) to also mirror card
-      entries into the new extension target's container — a focused,
-      `KeeBridgeCore`/app-side slice with no new JS yet. Still unresolved (needs the
-      maintainer): the actual field-name convention the 9 real card entries use.
+- [x] ~~Credit card autofill implementation (#3)~~ — bundled Safari Web Extension target
+      with native local KDBX decrypt, independent biometric Keychain cache, conservative
+      card-field aliases, injected user-initiated picker, and requested-field-only fill.
+      The app writes a separate read-only mirror straight from the source vault so this
+      path cannot interfere with the provider mirror's passkey merge-back. Still needs
+      real Safari/Touch ID verification because CI is headless.
 - [ ] Automatic proposal of storing the password after logging into a new site (#33) —
       investigated (STEP 6b refill, ROADMAP lane was otherwise empty this cycle), see
       `docs/done/2026-09-02-save-password-proposal-feasibility-spike.md`.

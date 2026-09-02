@@ -9,6 +9,14 @@
 /* Begin PBXBuildFile section */
 		11E417364902A622B95D2712 /* VaultBrowserView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4B06C621F76BB08C1309A0EE /* VaultBrowserView.swift */; };
 		14E96AEDAFE0422EEFA207D4 /* KeeBridgeProvider.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = CC20DB7562B9C6D57A564E81 /* KeeBridgeProvider.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+		A10000000000000000000001 /* SafariWebExtensionHandler.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000001 /* SafariWebExtensionHandler.swift */; };
+		A10000000000000000000002 /* KeeBridgeCore in Frameworks */ = {isa = PBXBuildFile; productRef = A20000000000000000000001 /* KeeBridgeCore */; };
+		A10000000000000000000003 /* manifest.json in Resources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000004 /* manifest.json */; };
+		A10000000000000000000004 /* background.js in Resources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000005 /* background.js */; };
+		A10000000000000000000005 /* content.js in Resources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000006 /* content.js */; };
+		A10000000000000000000006 /* KeeBridgeCardExtension.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = B10000000000000000000007 /* KeeBridgeCardExtension.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+		A10000000000000000000007 /* unlock.html in Resources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000008 /* unlock.html */; };
+		A10000000000000000000008 /* unlock.js in Resources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000009 /* unlock.js */; };
 		31324ECC28B100944E161695 /* EntryEditView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 75A8A7EC196ED66BCA61863F /* EntryEditView.swift */; };
 		40BA7B37FFEBB34F6AE25CA9 /* LockedView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F416411A6F003CBCEEC14003 /* LockedView.swift */; };
 		6E9FF00F0B07B3CDFEEB5B93 /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A760E0754682933EAC31DC09 /* ContentView.swift */; };
@@ -29,6 +37,13 @@
 			remoteGlobalIDString = 5E2A263ECB461219CB267716;
 			remoteInfo = KeeBridgeProvider;
 		};
+		E10000000000000000000002 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 44270B743D4A010F9315EC68 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = E10000000000000000000001;
+			remoteInfo = KeeBridgeCardExtension;
+		};
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXCopyFilesBuildPhase section */
@@ -39,6 +54,7 @@
 			dstSubfolderSpec = 13;
 			files = (
 				14E96AEDAFE0422EEFA207D4 /* KeeBridgeProvider.appex in Embed Foundation Extensions */,
+				A10000000000000000000006 /* KeeBridgeCardExtension.appex in Embed Foundation Extensions */,
 			);
 			name = "Embed Foundation Extensions";
 			runOnlyForDeploymentPostprocessing = 0;
@@ -61,6 +77,15 @@
 		EF3A57DF0FE81A9FC6D4A370 /* CredentialProviderViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CredentialProviderViewController.swift; sourceTree = "<group>"; };
 		F416411A6F003CBCEEC14003 /* LockedView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LockedView.swift; sourceTree = "<group>"; };
 		F42266AA316770336E02707E /* KeeBridgeCore */ = {isa = PBXFileReference; lastKnownFileType = folder; name = KeeBridgeCore; path = KeeBridgeCore; sourceTree = SOURCE_ROOT; };
+		B10000000000000000000001 /* SafariWebExtensionHandler.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SafariWebExtensionHandler.swift; sourceTree = "<group>"; };
+		B10000000000000000000002 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
+		B10000000000000000000003 /* KeeBridgeCardExtension.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = KeeBridgeCardExtension.entitlements; sourceTree = "<group>"; };
+		B10000000000000000000004 /* manifest.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = manifest.json; sourceTree = "<group>"; };
+		B10000000000000000000005 /* background.js */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.javascript; path = background.js; sourceTree = "<group>"; };
+		B10000000000000000000006 /* content.js */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.javascript; path = content.js; sourceTree = "<group>"; };
+		B10000000000000000000007 /* KeeBridgeCardExtension.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = KeeBridgeCardExtension.appex; sourceTree = BUILT_PRODUCTS_DIR; };
+		B10000000000000000000008 /* unlock.html */ = {isa = PBXFileReference; lastKnownFileType = text.html; path = unlock.html; sourceTree = "<group>"; };
+		B10000000000000000000009 /* unlock.js */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.javascript; path = unlock.js; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -80,6 +105,14 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		D10000000000000000000003 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				A10000000000000000000002 /* KeeBridgeCore in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
@@ -88,6 +121,7 @@
 			children = (
 				9C8AC20229CF86B375513902 /* KeeBridge.app */,
 				CC20DB7562B9C6D57A564E81 /* KeeBridgeProvider.appex */,
+				B10000000000000000000007 /* KeeBridgeCardExtension.appex */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -113,6 +147,7 @@
 			children = (
 				893A3D3DED4E0F20DD5A9A59 /* KeeBridge */,
 				FBD89663C64E41D2A3DAB646 /* KeeBridgeProvider */,
+				C10000000000000000000001 /* KeeBridgeCardExtension */,
 				D56C9589D662FC7461A683DD /* Packages */,
 				0106F72F4D9DB11AE6BC93C6 /* Products */,
 			);
@@ -134,6 +169,29 @@
 				4EBF9AE04F836E66986ABA6E /* KeeBridgeProvider.entitlements */,
 			);
 			path = KeeBridgeProvider;
+			sourceTree = "<group>";
+		};
+		C10000000000000000000001 /* KeeBridgeCardExtension */ = {
+			isa = PBXGroup;
+			children = (
+				B10000000000000000000001 /* SafariWebExtensionHandler.swift */,
+				B10000000000000000000002 /* Info.plist */,
+				B10000000000000000000003 /* KeeBridgeCardExtension.entitlements */,
+				C10000000000000000000002 /* Resources */,
+			);
+			path = KeeBridgeCardExtension;
+			sourceTree = "<group>";
+		};
+		C10000000000000000000002 /* Resources */ = {
+			isa = PBXGroup;
+			children = (
+				B10000000000000000000004 /* manifest.json */,
+				B10000000000000000000005 /* background.js */,
+				B10000000000000000000006 /* content.js */,
+				B10000000000000000000008 /* unlock.html */,
+				B10000000000000000000009 /* unlock.js */,
+			);
+			path = Resources;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
@@ -171,6 +229,7 @@
 			);
 			dependencies = (
 				6C3E065C928E2C778F9050E4 /* PBXTargetDependency */,
+				E10000000000000000000003 /* PBXTargetDependency */,
 			);
 			name = KeeBridge;
 			packageProductDependencies = (
@@ -179,6 +238,26 @@
 			productName = KeeBridge;
 			productReference = 9C8AC20229CF86B375513902 /* KeeBridge.app */;
 			productType = "com.apple.product-type.application";
+		};
+		E10000000000000000000001 /* KeeBridgeCardExtension */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = F10000000000000000000003 /* Build configuration list for PBXNativeTarget "KeeBridgeCardExtension" */;
+			buildPhases = (
+				D10000000000000000000001 /* Sources */,
+				D10000000000000000000002 /* Resources */,
+				D10000000000000000000003 /* Frameworks */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = KeeBridgeCardExtension;
+			packageProductDependencies = (
+				A20000000000000000000001 /* KeeBridgeCore */,
+			);
+			productName = KeeBridgeCardExtension;
+			productReference = B10000000000000000000007 /* KeeBridgeCardExtension.appex */;
+			productType = "com.apple.product-type.app-extension";
 		};
 /* End PBXNativeTarget section */
 
@@ -194,6 +273,10 @@
 						ProvisioningStyle = Automatic;
 					};
 					A63D8B1F33112AA4EDFADC5F = {
+						DevelopmentTeam = M2KQ698ZS5;
+						ProvisioningStyle = Automatic;
+					};
+					E10000000000000000000001 = {
 						DevelopmentTeam = M2KQ698ZS5;
 						ProvisioningStyle = Automatic;
 					};
@@ -218,6 +301,7 @@
 			targets = (
 				A63D8B1F33112AA4EDFADC5F /* KeeBridge */,
 				5E2A263ECB461219CB267716 /* KeeBridgeProvider */,
+				E10000000000000000000001 /* KeeBridgeCardExtension */,
 			);
 		};
 /* End PBXProject section */
@@ -228,6 +312,18 @@
 			buildActionMask = 2147483647;
 			files = (
 				D10D14236B9A9CBD864BDD00 /* Assets.xcassets in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		D10000000000000000000002 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				A10000000000000000000003 /* manifest.json in Resources */,
+				A10000000000000000000004 /* background.js in Resources */,
+				A10000000000000000000005 /* content.js in Resources */,
+				A10000000000000000000007 /* unlock.html in Resources */,
+				A10000000000000000000008 /* unlock.js in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -256,6 +352,14 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		D10000000000000000000001 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				A10000000000000000000001 /* SafariWebExtensionHandler.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXSourcesBuildPhase section */
 
 /* Begin PBXTargetDependency section */
@@ -263,6 +367,11 @@
 			isa = PBXTargetDependency;
 			target = 5E2A263ECB461219CB267716 /* KeeBridgeProvider */;
 			targetProxy = 3296E8049D620CD975D1A009 /* PBXContainerItemProxy */;
+		};
+		E10000000000000000000003 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = E10000000000000000000001 /* KeeBridgeCardExtension */;
+			targetProxy = E10000000000000000000002 /* PBXContainerItemProxy */;
 		};
 /* End PBXTargetDependency section */
 
@@ -486,6 +595,58 @@
 			};
 			name = Debug;
 		};
+		F10000000000000000000001 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				APPLICATION_EXTENSION_API_ONLY = YES;
+				CODE_SIGN_ENTITLEMENTS = KeeBridgeCardExtension/KeeBridgeCardExtension.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				COMBINE_HIDPI_IMAGES = YES;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = M2KQ698ZS5;
+				ENABLE_APP_SANDBOX = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = KeeBridgeCardExtension/Info.plist;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+					"@executable_path/../../../../Frameworks",
+				);
+				MACOSX_DEPLOYMENT_TARGET = 15.0;
+				MARKETING_VERSION = 0.1;
+				PRODUCT_BUNDLE_IDENTIFIER = com.martintooming.KeeBridge.CardExtension;
+				SDKROOT = macosx;
+				SKIP_INSTALL = YES;
+				SWIFT_VERSION = 6.1;
+			};
+			name = Debug;
+		};
+		F10000000000000000000002 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				APPLICATION_EXTENSION_API_ONLY = YES;
+				CODE_SIGN_ENTITLEMENTS = KeeBridgeCardExtension/KeeBridgeCardExtension.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				COMBINE_HIDPI_IMAGES = YES;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = M2KQ698ZS5;
+				ENABLE_APP_SANDBOX = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = KeeBridgeCardExtension/Info.plist;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+					"@executable_path/../../../../Frameworks",
+				);
+				MACOSX_DEPLOYMENT_TARGET = 15.0;
+				MARKETING_VERSION = 0.1;
+				PRODUCT_BUNDLE_IDENTIFIER = com.martintooming.KeeBridge.CardExtension;
+				SDKROOT = macosx;
+				SKIP_INSTALL = YES;
+				SWIFT_VERSION = 6.1;
+			};
+			name = Release;
+		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
@@ -516,6 +677,15 @@
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Debug;
 		};
+		F10000000000000000000003 /* Build configuration list for PBXNativeTarget "KeeBridgeCardExtension" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				F10000000000000000000001 /* Debug */,
+				F10000000000000000000002 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
 /* End XCConfigurationList section */
 
 /* Begin XCLocalSwiftPackageReference section */
@@ -531,6 +701,10 @@
 			productName = KeeBridgeCore;
 		};
 		507FA01BD99D60737317039A /* KeeBridgeCore */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = KeeBridgeCore;
+		};
+		A20000000000000000000001 /* KeeBridgeCore */ = {
 			isa = XCSwiftPackageProductDependency;
 			productName = KeeBridgeCore;
 		};
