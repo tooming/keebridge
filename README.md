@@ -1,6 +1,6 @@
 # KeeBridge
 
-A native macOS [Credential Provider Extension](https://developer.apple.com/documentation/authenticationservices/ascredentialproviderviewcontroller) for KeePass-compatible (`.kdbx`) vaults — system-wide password, TOTP, and (soon) card/passkey autofill in Safari and other apps, backed by your own vault file instead of a cloud password manager.
+A native macOS [Credential Provider Extension](https://developer.apple.com/documentation/authenticationservices/ascredentialproviderviewcontroller) for KeePass-compatible (`.kdbx`) vaults — system-wide password, TOTP, and passkey autofill (plus, soon, credit card autofill) in Safari and other apps, backed by your own vault file instead of a cloud password manager.
 
 Built as a personal replacement for a commercial password manager, with the explicit goal of avoiding vendor lock-in: the vault is a plain `.kdbx` file (the same format KeePass/KeePassXC/Strongbox use), synced however you like (this project uses Google Drive), and editable in [KeePassXC](https://keepassxc.org/) — KeeBridge only ever reads it for autofill, it never becomes the only thing that can open your data.
 
@@ -8,16 +8,16 @@ Built as a personal replacement for a commercial password manager, with the expl
 
 - **Passwords** — system-wide AutoFill via Safari's native "Log in as…" picker, backed by any `.kdbx` v3.1/4.0/4.1 vault
 - **TOTP / one-time codes** — RFC 6238, parses the `otpauth://` URI KeePassXC/Proton Pass store in an entry's `otp` field
+- **Vault write support** — create/edit/delete entries directly, from either the app's own UI or the headless `VaultProbe` CLI, not just via KeePassXC
+- **A real secrets-management UI** in the app itself — browse/search entries, reveal fields, edit, delete
+- **Passkeys (WebAuthn)** — sign in with an existing passkey, and register a brand-new one (both the interactive flow and, on macOS 15+, conditional/silent registration), backed by the vault's own KeePassXC-compatible passkey fields; visible read-only in both the app UI and `VaultProbe`. Still needs real-hardware verification (this project is built and validated headlessly, with no GUI or Touch ID hardware in CI) and carries a documented, unresolved Apple-side platform risk for third-party macOS passkey providers (AAGUID gets silently zeroed and the provider gets misreported as iCloud Keychain to the relying party) — see the issue tracker
 - **Independent Touch ID unlock** in both the container app and the extension, each with their own local cache so you're not re-authenticating for every field on a page
 
 ## What's planned
 
-See the [issue tracker](../../issues) for the actual backlog. Roughly, in priority order:
+See [`ROADMAP.md`](ROADMAP.md) for the full prioritized backlog and status, and the [issue tracker](../../issues) for individual items. The one real gap left:
 
-1. **Vault write support** — currently strictly read-only; needed for everything below
-2. **A real secrets-management UI** in the app itself (browse/add/edit/delete entries) — right now KeeBridge only unlocks and registers identities, KeePassXC is the only editor
-3. **Credit card autofill** — Apple has no system extension point for cards (confirmed: no `AuthenticationServices` credential type, no Info.plist capability key exists for it), so this means a Safari Web Extension with a content script, the same mechanism 1Password/Bitwarden/Dashlane/Proton Pass all actually use for cards
-4. **Passkeys** — real WebAuthn (P-256 signing, CBOR), plus vault write support; flagged as highest-risk: there's a documented, unresolved Apple-side bug around third-party macOS passkey providers as of this writing (AAGUID gets silently zeroed and the provider gets misreported as iCloud Keychain to the relying party)
+- **Credit card autofill** — Apple has no system extension point for cards (confirmed: no `AuthenticationServices` credential type, no Info.plist capability key exists for it), so this means a Safari Web Extension with a content script, the same mechanism 1Password/Bitwarden/Dashlane/Proton Pass all actually use for cards. Design is scoped (see `docs/done/2026-08-26-card-autofill-design-spike.md`); implementation is currently blocked on adding a new Xcode target, which needs either `xcodegen` (absent in this project's automated-execution environment) or a human doing it once by hand in real Xcode.
 
 ## Architecture
 
