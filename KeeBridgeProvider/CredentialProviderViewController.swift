@@ -18,13 +18,16 @@
 // straight into this extension's own sandboxed vault mirror, which the
 // app's mirrorVaultToExtension merges back into the real source vault the
 // next time it re-mirrors (VaultService.mergeExtensionOriginatedPasskeys).
-// Deliberately NOT implementing
-// performWithoutUserInteractionIfPossible(passkeyRegistration:) — that
-// override is only required when opting into
-// SupportsConditionalPasskeyRegistration (silent/background registration,
-// macOS 15+), a separate, still-unclaimed capability from `ProvidesPasskeys`
-// itself (confirmed via Apple's DocC JSON API, correcting an earlier,
-// overstated ROADMAP note that conflated the two).
+// Conditional passkey registration (v6):
+// performWithoutUserInteractionIfPossible(passkeyRegistration:) — see the
+// dedicated MARK below. This opts into SupportsConditionalPasskeyRegistration
+// (Info.plist), a separate capability from `ProvidesPasskeys`/
+// prepareInterface(forPasskeyRegistration:) above (confirmed via Apple's
+// DocC JSON API and cross-checked against Dashlane's own shipped
+// implementation, github.com/Dashlane/apple-apps, for the exact override
+// signature). No UI is allowed in this path at all, so it's deliberately
+// far more conservative than the interactive flow about when to register
+// silently — see that MARK's own doc comment for the exact conditions.
 //
 // This extension is fully independent from the KeeBridge app — it has its
 // own local (unshared) Keychain cache and its own unlock prompt the first
@@ -595,6 +598,21 @@ final class CredentialProviderViewController: ASCredentialProviderViewController
     // extension's own sandboxed vault mirror, same file `vaultURL`/
     // cachedPreHash already point at for reads.
 
+    /// Vault entries whose URL host matches `rpID` — same host-matching
+    /// idea `prepareCredentialList`'s manual list uses for service
+    /// identifiers, plus a subdomain check: a WebAuthn relying party ID is
+    /// a registrable domain suffix of the actual origin (spec §5.1.3), so
+    /// a vault entry's URL host is often a subdomain of it (e.g. host
+    /// "accounts.example.com" for rpID "example.com"), not an exact
+    /// match. Shared between the interactive registration flow below and
+    /// the conditional/silent one further down.
+    private func matchingEntries(forRelyingPartyID rpID: String, in entries: [VaultLoginEntry]) -> [VaultLoginEntry] {
+        entries.filter { entry in
+            guard let host = URL(string: entry.url)?.host else { return false }
+            return host == rpID || host.hasSuffix("." + rpID)
+        }
+    }
+
     @available(macOS 14.0, *)
     private func beginPasskeyRegistration(for request: ASCredentialRequest, content: KDBXContent) {
         guard let passkeyRequest = request as? ASPasskeyCredentialRequest,
@@ -607,16 +625,7 @@ final class CredentialProviderViewController: ASCredentialProviderViewController
 
         let entries = vaultService.listEntries(in: content)
         let rpID = identity.relyingPartyIdentifier
-        // Same host-matching idea prepareCredentialList's manual list uses
-        // for service identifiers, plus a subdomain check: a WebAuthn
-        // relying party ID is a registrable domain suffix of the actual
-        // origin (spec §5.1.3), so a vault entry's URL host is often a
-        // subdomain of it (e.g. host "accounts.example.com" for rpID
-        // "example.com"), not an exact match.
-        let matching = entries.filter { entry in
-            guard let host = URL(string: entry.url)?.host else { return false }
-            return host == rpID || host.hasSuffix("." + rpID)
-        }
+        let matching = matchingEntries(forRelyingPartyID: rpID, in: entries)
 
         if matching.count == 1 {
             completePasskeyRegistration(for: passkeyRequest, identity: identity, entry: matching[0])
@@ -698,6 +707,68 @@ final class CredentialProviderViewController: ASCredentialProviderViewController
             log.error("completePasskeyRegistration: threw: \(String(describing: error))")
             respondCancel(withError: error)
         }
+    }
+
+    // MARK: - Conditional passkey registration (v6 — silent/background, macOS 15+)
+    //
+    // SupportsConditionalPasskeyRegistration (Info.plist) opts into this as
+    // a separate capability from ProvidesPasskeys/prepareInterface(forPasskeyRegistration:)
+    // above (confirmed via Apple's DocC JSON API and cross-checked against
+    // Dashlane's own shipped implementation, github.com/Dashlane/apple-apps —
+    // same override, same ASPasskeyCredentialRequest parameter type). The
+    // system calls this INSTEAD of the interactive path when a site's
+    // conditional-mediation WebAuthn call might be satisfiable silently
+    // (e.g. right after a password-only sign-in on a site that also
+    // supports passkeys).
+    //
+    // No UI is permitted here at all — Apple's docs are explicit: "This
+    // request cannot show UI; ASExtensionErrorCodeUserInteractionRequired
+    // is treated like any other error." Cancelling with exactly that code
+    // tells the system to fall back to the normal interactive flow instead
+    // of failing the whole page.
+    //
+    // Deliberately conservative: this WRITES a brand-new WebAuthn
+    // credential with no human in the loop, so getting the conditions
+    // wrong risks silently creating passkeys the user never asked for.
+    // Registers only when ALL of:
+    //   1. The vault is ALREADY unlocked in memory (Self.validCachedContent())
+    //      — never attempts Keychain/Touch ID or the master-password
+    //      prompt, since neither can show UI either; this only ever fires
+    //      within an existing contentCacheTTL window from some earlier,
+    //      human-triggered unlock.
+    //   2. Exactly ONE existing entry's URL host matches the relying party
+    //      ID (matchingEntries, same rule the interactive flow above
+    //      uses) — zero or multiple matches means "not confident enough,"
+    //      and unlike the interactive flow there's no picker to fall back
+    //      to here, so this cancels instead.
+    //   3. That matched entry does NOT already have a passkey — never
+    //      silently replace or duplicate an existing one.
+    // Meeting all three reuses the exact same write path
+    // (completePasskeyRegistration) the interactive flow already uses.
+    @available(macOS 15.0, *)
+    override func performWithoutUserInteractionIfPossible(passkeyRegistration registrationRequest: ASPasskeyCredentialRequest) {
+        log.notice("→ performWithoutUserInteractionIfPossible(passkeyRegistration:) called")
+        beginRequest()
+        guard let identity = registrationRequest.credentialIdentity as? ASPasskeyCredentialIdentity else {
+            log.error("performWithoutUserInteractionIfPossible(passkeyRegistration:): unexpected credential identity type — cancelling")
+            respondCancel(.userInteractionRequired)
+            return
+        }
+        guard let content = Self.validCachedContent() else {
+            log.notice("performWithoutUserInteractionIfPossible(passkeyRegistration:): no in-memory unlocked vault — cancelling, no Keychain/Touch ID attempted")
+            respondCancel(.userInteractionRequired)
+            return
+        }
+
+        let rpID = identity.relyingPartyIdentifier
+        let matching = matchingEntries(forRelyingPartyID: rpID, in: vaultService.listEntries(in: content))
+        guard matching.count == 1, vaultService.passkeyMetadata(in: content, entryUUID: matching[0].uuid) == nil else {
+            log.notice("performWithoutUserInteractionIfPossible(passkeyRegistration:): \(matching.count) URL-host matches (need exactly 1, no existing passkey) for rpID=\(rpID, privacy: .public) — cancelling")
+            respondCancel(.userInteractionRequired)
+            return
+        }
+
+        completePasskeyRegistration(for: registrationRequest, identity: identity, entry: matching[0])
     }
 
     private func completePasswordCredential(content: KDBXContent, recordIdentifier: String, username: String) {
