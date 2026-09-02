@@ -215,23 +215,31 @@ public struct VaultService: Sendable {
         try currentTOTPCode(in: try openVault(at: url, rawKeyData: rawKeyData), entryUUID: entryUUID)
     }
 
-    // MARK: - Passkeys (read-only metadata — no signing/registration yet)
+    // MARK: - Passkeys (read-only metadata + write/merge; signing lives in
+    // PasskeyCrypto, consumed by KeeBridgeProvider's CredentialProviderViewController)
 
     /// Non-secret passkey metadata for one entry: relying party, WebAuthn
-    /// username, and (base64url-decoded) credential ID. Deliberately never
-    /// includes the private key — that stays out of `VaultService`'s
-    /// surface until real WebAuthn assertion-signing logic exists to
-    /// consume it, matching this repo's reveal-on-demand secret-hygiene
-    /// discipline for every other field (`revealField`, `currentTOTPCode`).
+    /// username, (base64url-decoded) credential ID, and WebAuthn user
+    /// handle. Deliberately never includes the private key — that stays
+    /// out of `VaultService`'s general-purpose surface, reachable only via
+    /// `revealPasskeyPrivateKeyPEM` at actual signing time, matching this
+    /// repo's reveal-on-demand secret-hygiene discipline for every other
+    /// field (`revealField`, `currentTOTPCode`). `userHandle` is WebAuthn
+    /// user-identifying metadata, not a secret — same classification as
+    /// `username`/`credentialID` — and is what `ASPasskeyCredentialIdentity`
+    /// requires (non-optional there) to register a passkey with the system
+    /// so it can actually route an assertion request to this app.
     public struct VaultPasskeyMetadata: Sendable {
         public let relyingParty: String?
         public let username: String?
         public let credentialID: Data?
+        public let userHandle: Data?
 
-        public init(relyingParty: String?, username: String?, credentialID: Data?) {
+        public init(relyingParty: String?, username: String?, credentialID: Data?, userHandle: Data? = nil) {
             self.relyingParty = relyingParty
             self.username = username
             self.credentialID = credentialID
+            self.userHandle = userHandle
         }
     }
 
@@ -247,7 +255,8 @@ public struct VaultService: Sendable {
         return VaultPasskeyMetadata(
             relyingParty: entry.passkeyRelyingParty,
             username: entry.passkeyUsername,
-            credentialID: entry.passkeyCredentialID
+            credentialID: entry.passkeyCredentialID,
+            userHandle: entry.passkeyUserHandle
         )
     }
 

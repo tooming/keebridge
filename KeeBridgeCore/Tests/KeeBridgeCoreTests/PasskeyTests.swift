@@ -39,6 +39,7 @@ private func makeVaultWithPasskeyEntry(at url: URL) throws -> String {
     passkeyEntry.setPasskeyRelyingParty("example.com")
     passkeyEntry.setPasskeyUsername("alice@example.com")
     passkeyEntry.setPasskeyCredentialID(Data([0x01, 0x02, 0x03, 0x04]))
+    passkeyEntry.setPasskeyUserHandle(Data([0xAA, 0xBB]))
     passkeyEntry.setPasskeyPrivateKeyPEM("-----BEGIN PRIVATE KEY-----\nMOCK-NOT-A-REAL-KEY\n-----END PRIVATE KEY-----")
     content.database.root.group.entries.append(passkeyEntry)
 
@@ -85,6 +86,7 @@ private func makeVaultWithPasskeyEntry(at url: URL) throws -> String {
     #expect(metadata?.relyingParty == "example.com")
     #expect(metadata?.username == "alice@example.com")
     #expect(metadata?.credentialID == Data([0x01, 0x02, 0x03, 0x04]))
+    #expect(metadata?.userHandle == Data([0xAA, 0xBB]))
 }
 
 @Test func passkeyMetadataReturnsNilForNonPasskeyEntry() throws {
