@@ -28,7 +28,14 @@ struct VaultBrowserView: View {
         NavigationSplitView {
             List(filteredEntries, id: \.uuid, selection: $selectedUUID) { entry in
                 VStack(alignment: .leading, spacing: 2) {
-                    Text(entry.title).bold()
+                    HStack(spacing: 4) {
+                        Text(entry.title).bold()
+                        if entry.isPasskey {
+                            Image(systemName: "person.badge.key.fill")
+                                .foregroundStyle(.secondary)
+                                .help("Has a passkey")
+                        }
+                    }
                     Text(entry.username.isEmpty ? entry.url : entry.username)
                         .font(.caption)
                         .foregroundStyle(.secondary)
