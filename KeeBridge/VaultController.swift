@@ -375,6 +375,18 @@ final class VaultController: ObservableObject {
         return vaultService.revealEntry(in: cachedContent, uuid: uuid)
     }
 
+    /// Read-only passkey metadata (relying party/username/credential ID —
+    /// never the private key) for display in `EntryDetailView`. Same
+    /// synchronous, no-Argon2, in-memory shape as `revealEntryForEditing`
+    /// above — this app's UI never had any passkey visibility before this,
+    /// even though the vault format, `VaultService`, and the extension have
+    /// supported passkeys for several ROADMAP cycles now; KeePassXC or
+    /// `VaultProbe` were the only ways to even confirm an entry had one.
+    func passkeyMetadata(uuid: String) -> VaultService.VaultPasskeyMetadata? {
+        guard let cachedContent else { return nil }
+        return vaultService.passkeyMetadata(in: cachedContent, entryUUID: uuid)
+    }
+
     // MARK: - Mirroring into the extension's sandbox container
 
     /// Copies the source vault straight into the extension's own sandbox

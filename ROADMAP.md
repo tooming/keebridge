@@ -238,6 +238,15 @@
       feasibility spike's (#9) full recommended sequencing — `VaultProbe` now has all six
       subcommands (`list`/`reveal`/`totp`/`create`/`update`/`delete`), `--json` on every
       one, and a real `probe-build` CI gate.
+- [x] ~~Passkey visibility in the app's own secrets-management UI~~ — done, see
+      `docs/done/2026-09-02-passkey-visibility-in-app-ui.md`. Discovered via a STEP 6b
+      re-survey (fresh read of `EntryDetailView`/`VaultBrowserView`/`VaultController`):
+      passkey support has been built out for several cycles now, but the app's own UI had
+      zero visibility into it — KeePassXC/`VaultProbe` were the only ways to confirm an
+      entry had one. Read-only: a "Passkey" section in `EntryDetailView` (relying
+      party/username/credential ID, never the private key) plus a small icon on
+      passkey-bearing rows in `VaultBrowserView`'s list. No new write path — creating/using
+      passkeys stays the credential provider extension's job (#4).
 
 ## Needs maintainer/human action (not code)
 

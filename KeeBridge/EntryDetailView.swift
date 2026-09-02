@@ -19,6 +19,7 @@ struct EntryDetailView: View {
     @State private var showPasswordPlaintext = false
     @State private var showingEdit = false
     @State private var showingDeleteConfirm = false
+    @State private var passkeyMetadata: VaultService.VaultPasskeyMetadata?
 
     var body: some View {
         Form {
@@ -59,6 +60,34 @@ struct EntryDetailView: View {
                 if !revealedNotes.isEmpty {
                     LabeledContent("Notes") {
                         Text(revealedNotes)
+                    }
+                }
+            }
+
+            // Read-only — passkeys are created/used via the credential
+            // provider extension (see ROADMAP #4); this is visibility only,
+            // the first place in the app's own UI to show that an entry
+            // even has one. KeePassXC or VaultProbe were previously the
+            // only ways to confirm this.
+            if entry.isPasskey {
+                Section("Passkey") {
+                    if let passkeyMetadata {
+                        if let relyingParty = passkeyMetadata.relyingParty {
+                            fieldRow(label: "Relying Party", value: relyingParty, copyable: true)
+                        }
+                        if let username = passkeyMetadata.username {
+                            fieldRow(label: "Passkey Username", value: username, copyable: true)
+                        }
+                        if let credentialID = passkeyMetadata.credentialID {
+                            fieldRow(
+                                label: "Credential ID",
+                                value: credentialID.base64EncodedString(),
+                                copyable: true
+                            )
+                        }
+                    } else {
+                        Text("No passkey metadata found.")
+                            .foregroundStyle(.secondary)
                     }
                 }
             }
@@ -118,6 +147,7 @@ struct EntryDetailView: View {
     // anymore.
     private func reveal() {
         showPasswordPlaintext = false
+        passkeyMetadata = entry.isPasskey ? controller.passkeyMetadata(uuid: entry.uuid) : nil
         guard let draft = controller.revealEntryForEditing(uuid: entry.uuid) else {
             revealedPassword = nil
             return
