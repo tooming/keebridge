@@ -180,6 +180,42 @@ private func makeVaultWithPasskeyEntry(at url: URL) throws -> String {
     #expect(metadata?.relyingParty == "example.com")
     #expect(metadata?.username == "alice@example.com")
     #expect(metadata?.credentialID == Data([0xAA, 0xBB]))
+    #expect(metadata?.userHandle == Data([0xCC]))
+}
+
+@Test func setPasskeyPersistsAGeneratedPrivateKeyUsableForSigning() throws {
+    let service = VaultService()
+    let url = tempVaultURL()
+    defer { try? FileManager.default.removeItem(at: url) }
+    try service.createVault(at: url, masterPassword: testPassword, databaseName: "Test Vault")
+
+    let uuid = try service.createEntry(
+        VaultService.EntryDraft(title: "example.com", username: "alice", password: "s3cret"),
+        at: url, masterPassword: testPassword
+    )
+    let privateKeyPEM = PasskeyCrypto.generatePrivateKeyPEM()
+    let credentialID = PasskeyCrypto.generateCredentialID()
+    let userHandle = Data([0x01, 0x02, 0x03])
+
+    try service.setPasskey(
+        uuid: uuid,
+        relyingParty: "example.com",
+        credentialID: credentialID,
+        privateKeyPEM: privateKeyPEM,
+        username: "alice@example.com",
+        userHandle: userHandle,
+        at: url, masterPassword: testPassword
+    )
+
+    let content = try service.openVault(at: url, masterPassword: testPassword)
+    let metadata = service.passkeyMetadata(in: content, entryUUID: uuid)
+    #expect(metadata?.credentialID == credentialID)
+    #expect(metadata?.userHandle == userHandle)
+
+    let revealedPEM = try #require(service.revealPasskeyPrivateKeyPEM(in: content, entryUUID: uuid))
+    let authenticatorData = try PasskeyCrypto.authenticatorData(relyingPartyID: "example.com", signCount: 0)
+    let clientDataHash = Data(repeating: 0xAB, count: 32)
+    _ = try PasskeyCrypto.sign(authenticatorData + clientDataHash, withPrivateKeyPEM: revealedPEM)
 }
 
 // MARK: - mergeExtensionOriginatedPasskeys
