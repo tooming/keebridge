@@ -20,6 +20,7 @@ struct EntryDetailView: View {
     @State private var showingEdit = false
     @State private var showingDeleteConfirm = false
     @State private var passkeyMetadata: VaultService.VaultPasskeyMetadata?
+    @State private var paymentCardMetadata: VaultPaymentCard?
 
     var body: some View {
         Form {
@@ -91,6 +92,23 @@ struct EntryDetailView: View {
                     }
                 }
             }
+
+            // Read-only, same posture as the "Passkey" section above and the
+            // Safari card extension's own picker: only which field *types*
+            // are present, never a card number/expiry/CVV value. Card
+            // create/edit stays out of scope for this app — see ROADMAP.
+            if entry.isPaymentCard {
+                Section("Payment Card") {
+                    if let paymentCardMetadata {
+                        ForEach(paymentCardMetadata.availableFields, id: \.self) { field in
+                            LabeledContent(field.displayName, value: "Present")
+                        }
+                    } else {
+                        Text("No payment card metadata found.")
+                            .foregroundStyle(.secondary)
+                    }
+                }
+            }
         }
         .formStyle(.grouped)
         .navigationTitle(entry.title)
@@ -148,6 +166,7 @@ struct EntryDetailView: View {
     private func reveal() {
         showPasswordPlaintext = false
         passkeyMetadata = entry.isPasskey ? controller.passkeyMetadata(uuid: entry.uuid) : nil
+        paymentCardMetadata = entry.isPaymentCard ? controller.paymentCardMetadata(uuid: entry.uuid) : nil
         guard let draft = controller.revealEntryForEditing(uuid: entry.uuid) else {
             revealedPassword = nil
             return

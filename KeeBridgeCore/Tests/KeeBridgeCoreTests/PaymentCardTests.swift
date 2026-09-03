@@ -80,3 +80,62 @@ import KDBXKit
     #expect(fields[.verificationCode] == nil)
     #expect(fields.values.contains("must-not-leak") == false)
 }
+
+// MARK: - Read-only visibility (isPaymentCard flag + per-entry metadata)
+//
+// Mirrors the passkey-visibility tests: a card entry must be flagged in
+// listEntries() and have per-entry metadata (title + available field
+// *types*, never values) resolvable by UUID; a non-card entry must not.
+
+@Test func listEntriesFlagsRecognizedPaymentCards() {
+    var content = KDBXContent.makeEmpty(databaseName: "Card Visibility Test")
+    let cardID = UUID()
+    content.database.root.group.entries.append(KDBX.Entry(
+        uuid: cardID,
+        times: KDBX.Times(),
+        strings: [
+            KDBX.ProtectedString(key: "Title", value: .regular("Personal Visa")),
+            KDBX.ProtectedString(key: "Card Number", value: .regular("4111111111111111")),
+            KDBX.ProtectedString(key: "CVV", value: .regular("123")),
+        ]
+    ))
+    let plainID = UUID()
+    content.database.root.group.entries.append(KDBX.Entry(
+        uuid: plainID,
+        times: KDBX.Times(),
+        strings: [
+            KDBX.ProtectedString(key: "Title", value: .regular("Just a login")),
+            KDBX.ProtectedString(key: "UserName", value: .regular("alice")),
+            KDBX.ProtectedString(key: "Password", value: .regular("hunter2")),
+        ]
+    ))
+
+    let entries = VaultService().listEntries(in: content)
+    #expect(entries.first { $0.uuid == "\(cardID)" }?.isPaymentCard == true)
+    #expect(entries.first { $0.uuid == "\(plainID)" }?.isPaymentCard == false)
+}
+
+@Test func paymentCardMetadataReturnsAvailableFieldTypesOnlyByUUID() throws {
+    var content = KDBXContent.makeEmpty(databaseName: "Card Metadata Test")
+    let cardID = UUID()
+    content.database.root.group.entries.append(KDBX.Entry(
+        uuid: cardID,
+        times: KDBX.Times(),
+        strings: [
+            KDBX.ProtectedString(key: "Title", value: .regular("Business Amex")),
+            KDBX.ProtectedString(key: "Card Number", value: .regular("378282246310005")),
+            KDBX.ProtectedString(key: "Expiration Date", value: .regular("11/28")),
+        ]
+    ))
+
+    let service = VaultService()
+    let metadata = try #require(service.paymentCardMetadata(in: content, entryUUID: "\(cardID)"))
+    #expect(metadata.title == "Business Amex")
+    #expect(Set(metadata.availableFields) == [.number, .expiration])
+    #expect(service.paymentCardMetadata(in: content, entryUUID: "\(UUID())") == nil)
+}
+
+@Test func paymentCardFieldDisplayNamesAreHumanReadable() {
+    #expect(PaymentCardField.number.displayName == "Card Number")
+    #expect(PaymentCardField.verificationCode.displayName == "CVV / Security Code")
+}

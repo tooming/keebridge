@@ -311,6 +311,16 @@
       `setPasskey`/`updateEntry`/`passkeyMetadata` path. Discovered via a fresh, full read
       of `VaultService.swift`'s write section — no run had read it end-to-end before.
 
+- [x] ~~Payment card visibility in the app's own secrets-management UI + `VaultProbe`~~ —
+      done, see `docs/done/2026-09-03-payment-card-visibility-in-app-ui.md`. Discovered via
+      a STEP 6b re-survey: the recently-landed Safari card-autofill extension and
+      `PaymentCard.swift` had full payment-card recognition, but neither the app's own UI
+      nor `VaultProbe` had any visibility into it — the same gap passkeys had before their
+      own visibility fix. `VaultLoginEntry` gained `isPaymentCard`; `EntryDetailView`/
+      `VaultBrowserView` show a read-only "Payment Card" section/icon (which field types
+      are present, never values); `VaultProbe` gained a `card` subcommand and a `list`
+      marker, same metadata-only scope as the existing `passkey` subcommand.
+
 ## Needs maintainer/human action (not code)
 
 - [ ] Decommission Proton Pass — final migration step (#5) — password + TOTP autofill via

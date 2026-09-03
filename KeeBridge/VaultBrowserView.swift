@@ -35,6 +35,11 @@ struct VaultBrowserView: View {
                                 .foregroundStyle(.secondary)
                                 .help("Has a passkey")
                         }
+                        if entry.isPaymentCard {
+                            Image(systemName: "creditcard.fill")
+                                .foregroundStyle(.secondary)
+                                .help("Recognized as a payment card")
+                        }
                     }
                     Text(entry.username.isEmpty ? entry.url : entry.username)
                         .font(.caption)

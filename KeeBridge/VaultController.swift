@@ -387,6 +387,17 @@ final class VaultController: ObservableObject {
         return vaultService.passkeyMetadata(in: cachedContent, entryUUID: uuid)
     }
 
+    /// Read-only payment-card metadata (title + which field *types* are
+    /// present — never a card number, expiry, or CVV value) for display in
+    /// `EntryDetailView`. Same synchronous, no-Argon2, in-memory shape as
+    /// `passkeyMetadata(uuid:)` above — the app's own UI had zero visibility
+    /// into recognized card entries before this, same gap passkey
+    /// visibility had before its own fix.
+    func paymentCardMetadata(uuid: String) -> VaultPaymentCard? {
+        guard let cachedContent else { return nil }
+        return vaultService.paymentCardMetadata(in: cachedContent, entryUUID: uuid)
+    }
+
     // MARK: - Mirroring into the extension's sandbox container
 
     /// Copies the source vault straight into the extension's own sandbox

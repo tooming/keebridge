@@ -73,6 +73,22 @@ public enum PaymentCardField: String, CaseIterable, Sendable {
             && (!fields.isDisjoint(with: [.expiration, .expirationMonth, .expirationYear, .verificationCode]))
     }
 
+    /// Human-readable label for this field, for read-only UI/CLI display
+    /// (`EntryDetailView`'s "Payment Card" section, `VaultProbe card`) —
+    /// never paired with the field's actual value in those surfaces, same
+    /// "which fields exist, not what they contain" scope as passkey
+    /// metadata display.
+    public var displayName: String {
+        switch self {
+        case .number: return "Card Number"
+        case .holder: return "Cardholder Name"
+        case .expiration: return "Expiration Date"
+        case .expirationMonth: return "Expiration Month"
+        case .expirationYear: return "Expiration Year"
+        case .verificationCode: return "CVV / Security Code"
+        }
+    }
+
     fileprivate static func value(in entry: KDBX.Entry, for field: PaymentCardField) -> String? {
         guard let names = aliases[field] else { return nil }
         for alias in names {
@@ -161,6 +177,21 @@ extension VaultService {
             }
         }
         return result
+    }
+
+    /// Card-selection metadata (title + available field *types*, never
+    /// values) for one entry, by UUID — the per-entry counterpart to
+    /// `listPaymentCards(in:)`, used for read-only display (`EntryDetailView`'s
+    /// "Payment Card" section, `VaultProbe card`). Returns `nil` if the UUID
+    /// doesn't match any recognized card entry.
+    public func paymentCardMetadata(in content: KDBXContent, entryUUID: String) -> VaultPaymentCard? {
+        listPaymentCards(in: content).first { $0.uuid == entryUUID }
+    }
+
+    /// Same as `paymentCardMetadata(in:entryUUID:)`, opening the vault fresh
+    /// from disk first — convenience for one-off reads (`VaultProbe`).
+    public func paymentCardMetadata(at url: URL, masterPassword: String, entryUUID: String) throws -> VaultPaymentCard? {
+        paymentCardMetadata(in: try openVault(at: url, masterPassword: masterPassword), entryUUID: entryUUID)
     }
 
     static func paymentCardExpirationParts(_ value: String) -> (month: String, year: String)? {
