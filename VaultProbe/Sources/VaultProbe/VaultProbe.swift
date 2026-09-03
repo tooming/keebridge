@@ -2,21 +2,23 @@
 //
 // Originally a milestone-1 validation tool (prove KDBXKit can open the real
 // vault.kdbx before any UI/extension code existed); now a small general CLI
-// with seven subcommands: `list`, `reveal`, `totp`, `passkey` (read-only),
-// and `create`, `update`, `delete` (write). Same secret-hygiene discipline
-// throughout: only ever prints a field *value* when the command explicitly
-// asked for that one field (`reveal`/`totp`/`passkey`) — `list` prints only
-// titles/usernames/URLs/UUIDs, a passkey indicator, and custom-field
+// with eight subcommands: `list`, `reveal`, `totp`, `passkey`, `card`
+// (read-only), and `create`, `update`, `delete` (write). Same secret-hygiene
+// discipline throughout: only ever prints a field *value* when the command
+// explicitly asked for that one field (`reveal`/`totp`) — `list` prints only
+// titles/usernames/URLs/UUIDs, passkey/card indicators, and custom-field
 // *names*, never values; the write subcommands never print a field value
-// back either (just the UUID + a confirmation). `passkey` itself never
-// prints the private key — same read-only, metadata-only scope as the app's
-// own passkey UI (`EntryDetailView`'s "Passkey" section).
+// back either (just the UUID + a confirmation). `passkey`/`card` never
+// print secret material (private key / card number, expiry, CVV) — same
+// read-only, metadata-only scope as the app's own "Passkey"/"Payment Card"
+// sections in `EntryDetailView`.
 //
 // Usage:
 //   swift run VaultProbe list <path/to/vault.kdbx>
 //   swift run VaultProbe reveal <path/to/vault.kdbx> <entry-uuid> <field-key>
 //   swift run VaultProbe totp <path/to/vault.kdbx> <entry-uuid>
 //   swift run VaultProbe passkey <path/to/vault.kdbx> <entry-uuid>
+//   swift run VaultProbe card <path/to/vault.kdbx> <entry-uuid>
 //   swift run VaultProbe create <path/to/vault.kdbx> [--title ...] [--username ...] ...
 //   swift run VaultProbe update <path/to/vault.kdbx> <entry-uuid> [--title ...] ...
 //   swift run VaultProbe delete <path/to/vault.kdbx> <entry-uuid> --yes
@@ -110,7 +112,7 @@ struct VaultProbe: ParsableCommand {
     static let configuration = CommandConfiguration(
         abstract: "Headless KDBX vault inspector, built on KeeBridgeCore — no GUI, no Touch ID.",
         subcommands: [
-            ListCommand.self, RevealCommand.self, TOTPCommand.self, PasskeyCommand.self,
+            ListCommand.self, RevealCommand.self, TOTPCommand.self, PasskeyCommand.self, CardCommand.self,
             CreateCommand.self, UpdateCommand.self, DeleteCommand.self,
         ],
         defaultSubcommand: ListCommand.self
@@ -130,6 +132,7 @@ struct ListCommand: ParsableCommand {
         let url: String
         let customFieldKeys: [String]
         let isPasskey: Bool
+        let isPaymentCard: Bool
     }
 
     struct JSONOutput: Encodable {
@@ -153,7 +156,8 @@ struct ListCommand: ParsableCommand {
                 entries: entries.map {
                     JSONEntry(
                         uuid: $0.uuid, title: $0.title, username: $0.username, url: $0.url,
-                        customFieldKeys: $0.customFieldKeys, isPasskey: $0.isPasskey
+                        customFieldKeys: $0.customFieldKeys, isPasskey: $0.isPasskey,
+                        isPaymentCard: $0.isPaymentCard
                     )
                 },
                 customFieldKeys: sortedCustomKeys
@@ -167,7 +171,8 @@ struct ListCommand: ParsableCommand {
             let usernameDisplay = entry.username.isEmpty ? "(no username)" : entry.username
             let urlDisplay = entry.url.isEmpty ? "(no url)" : entry.url
             let passkeyMarker = entry.isPasskey ? "  [passkey]" : ""
-            print("- \(entry.title)  |  \(usernameDisplay)  |  \(urlDisplay)  |  uuid=\(entry.uuid)\(passkeyMarker)")
+            let cardMarker = entry.isPaymentCard ? "  [card]" : ""
+            print("- \(entry.title)  |  \(usernameDisplay)  |  \(urlDisplay)  |  uuid=\(entry.uuid)\(passkeyMarker)\(cardMarker)")
         }
         print("\n=== distinct custom field keys across all entries (names only, no values) ===")
         if sortedCustomKeys.isEmpty {
@@ -299,6 +304,53 @@ struct PasskeyCommand: ParsableCommand {
             print("Username:      \(metadata.username ?? "(none)")")
             print("Credential ID: \(metadata.credentialID?.base64EncodedString() ?? "(none)")")
             print("User handle:   \(metadata.userHandle?.base64EncodedString() ?? "(none)")")
+        }
+    }
+}
+
+struct CardCommand: ParsableCommand {
+    static let configuration = CommandConfiguration(
+        commandName: "card",
+        abstract: "Print which payment-card field types (Card Number, CVV, ...) one entry has — never the values themselves."
+    )
+
+    struct JSONOutput: Encodable {
+        let uuid: String
+        let title: String
+        let availableFields: [String]
+    }
+
+    @OptionGroup var vault: VaultPathArguments
+    @OptionGroup var output: OutputOptions
+    @Argument(help: "Entry UUID, as printed by `list`.")
+    var entryUUID: String
+
+    mutating func run() throws {
+        let url = try vault.resolved()
+        let password = try promptPassword(for: url)
+
+        // Same read-only, metadata-only scope as EntryDetailView's own
+        // "Payment Card" section: which field types are present, never a
+        // card number/expiry/CVV value — `revealPaymentCardFields`/`reveal`
+        // stay the only way to see an actual value, request-scoped.
+        guard let card = try VaultService().paymentCardMetadata(
+            at: url, masterPassword: password, entryUUID: entryUUID
+        ) else {
+            throw ValidationError("No entry with UUID \(entryUUID), or it isn't recognized as a payment card.")
+        }
+
+        if output.json {
+            try printJSON(JSONOutput(
+                uuid: entryUUID,
+                title: card.title,
+                availableFields: card.availableFields.map(\.displayName)
+            ))
+        } else {
+            print("Title: \(card.title)")
+            print("Available fields:")
+            for field in card.availableFields {
+                print("- \(field.displayName)")
+            }
         }
     }
 }

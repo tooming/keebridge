@@ -27,14 +27,22 @@ public struct VaultLoginEntry: Sendable {
     /// (`docs/done/2026-08-26-passkey-design-spike.md`) for why this repo
     /// follows KeePassXC's convention rather than inventing its own.
     public let isPasskey: Bool
+    /// Whether this entry's custom-field names match a recognized payment
+    /// card (per `PaymentCardField.isRecognizedCard` — the same conservative
+    /// alias-based detection the Safari card-autofill extension uses).
+    /// Never exposes any card field *value* — see `VaultService.paymentCardMetadata`
+    /// for the (still-secret-free) available-field-types metadata, and
+    /// `revealPaymentCardFields` for the request-scoped value reveal.
+    public let isPaymentCard: Bool
 
-    public init(uuid: String, title: String, username: String, url: String, customFieldKeys: [String], isPasskey: Bool = false) {
+    public init(uuid: String, title: String, username: String, url: String, customFieldKeys: [String], isPasskey: Bool = false, isPaymentCard: Bool = false) {
         self.uuid = uuid
         self.title = title
         self.username = username
         self.url = url
         self.customFieldKeys = customFieldKeys
         self.isPasskey = isPasskey
+        self.isPaymentCard = isPaymentCard
     }
 }
 
@@ -121,7 +129,8 @@ public struct VaultService: Sendable {
                     username: username,
                     url: entryURL,
                     customFieldKeys: customKeys,
-                    isPasskey: entry.isPasskey
+                    isPasskey: entry.isPasskey,
+                    isPaymentCard: PaymentCardField.isRecognizedCard(customFieldNames: entry.strings.map(\.key))
                 ))
             }
             for child in group.groups {
