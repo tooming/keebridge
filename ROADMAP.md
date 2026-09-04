@@ -55,6 +55,44 @@
       Unlike the QR/hybrid-transport finding below, this one may become buildable later
       if Apple ships a macOS counterpart — re-check next time `project.yml`'s
       `MACOSX_DEPLOYMENT_TARGET` moves forward.
+- [x] ~~QR scanner's `AVCaptureSession` never stopped if the scan sheet is dismissed
+      without a successful scan~~ — done, see
+      `docs/done/2026-09-04-qr-scanner-session-cleanup.md`. Found via a STEP 6b re-survey
+      (`EntryEditView.swift`'s first full read by any run): `QRCodeCameraPreview.session.
+      stopRunning()` was only ever called from the scan-success path in
+      `metadataOutput(_:didOutput:from:)` — dismissing the "Scan QR Code…" sheet any other
+      way (Escape, click-outside, the parent form's Cancel) left the `AVCaptureSession`
+      running indefinitely with no view left to show it, keeping the camera active and the
+      system's camera-in-use indicator lit. Fixed by implementing
+      `QRCodeCameraView.dismantleNSView(_:coordinator:)` (the `NSViewRepresentable`
+      teardown hook SwiftUI calls when the represented view leaves the hierarchy) to stop
+      the session unconditionally. Compiled-only (`xcodebuild`) — `KeeBridge`'s SwiftUI/
+      AppKit views have no test target, same as every other app-layer change in this
+      ROADMAP; confirming the camera indicator actually turns off needs real hardware,
+      flagged as a "still needs a human eyeball" caveat in the PR per the HEADLESS ONLY
+      rule.
+- [ ] `VaultProbe` OTP write parity — `CreateCommand`/`UpdateCommand` have no `--otp-uri`
+      flag, so there is no CLI path to create an entry with a TOTP secret, add one to an
+      existing entry, or remove one, even though `VaultService.EntryDraft.otpURI` and its
+      nil-preserves/empty-removes/non-empty-sets contract are already fully implemented
+      and unit-tested (`entryDraftRoundTripsOTPURI` in `VaultWritingTests.swift`) and the
+      app's own `EntryEditView` already exposes a full OTP section. `reveal`/`totp` can
+      already read OTP secrets; `create`/`update` can't write them. Also a doc-accuracy
+      gap: `README.md` claims read/write parity between the app UI and `VaultProbe` that
+      doesn't actually hold for this field. Found via the same 2026-09-04 STEP 6b
+      re-survey as the item above. Small — add `--otp-uri` to both commands, threading
+      straight into `EntryDraft(otpURI:)` (already-tested nil/empty/non-empty semantics
+      need no new logic).
+- [ ] Test coverage for `PaymentCard.revealPaymentCardFields`'s split-field → combined
+      `.expiration` synthesis branch (`result[field] = "\(month)/\(year)"` when an entry
+      has separate `Expiration Month`/`Expiration Year` fields but no combined
+      `Expiration Date` field) — this is live, secret-touching, extension-reachable code
+      (`KeeBridgeCardExtension`'s `content.js` requests `"expiration"` for any
+      `autocomplete="cc-exp"` field) with zero test coverage; only the opposite
+      direction (combined field → split `.expirationMonth`/`.expirationYear`) is
+      currently tested (`paymentCardListingIsMetadataOnlyAndRevealIsRequestScoped` in
+      `PaymentCardTests.swift`). Found via the same 2026-09-04 STEP 6b re-survey. Small,
+      test-only — add `@Test` case(s) to `PaymentCardTests.swift`.
 - [x] ~~Passkey support: storage convention + platform-risk design spike (#4)~~ — done,
       see `docs/done/2026-08-26-passkey-design-spike.md`, **corrected next cycle**: the
       storage-convention finding there (a `webauthn.pem` file attachment) was wrong —
