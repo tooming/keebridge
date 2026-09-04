@@ -34,10 +34,26 @@ final class SafariWebExtensionHandler: NSObject, NSExtensionRequestHandling {
     // request despite the code's own comments claiming a cache exists.
     // Kept for the lifetime of the extension process only — never
     // persisted to disk.
-    private static var cachedPreHash: Data?
-    private static var cachedContent: KDBXContent?
-    private static var cachedContentDate: Date?
-    private static var cachedMirrorDate: Date?
+    //
+    // `nonisolated(unsafe)`: `CredentialProviderViewController`'s identical
+    // static cache needs no such annotation because it's a UI view
+    // controller, implicitly `@MainActor`-isolated by the SDK, so the
+    // compiler already knows every access is single-threaded.
+    // `SafariWebExtensionHandler` is a plain `NSObject` with no actor
+    // isolation, so Swift 6's strict concurrency checking (this project
+    // builds under `SWIFT_VERSION: "6.1"`, per `project.yml`) flags these
+    // as "nonisolated global shared mutable state" by default — correctly,
+    // in general, since nothing in the type system alone proves they're
+    // synchronized. They ARE synchronized in practice: every read and
+    // write happens inside `handle(_:context:)`, which `beginRequest(with:)`
+    // always dispatches onto `workQueue` (a private *serial* queue, defined
+    // just above) — so this is manual queue-based synchronization, the
+    // pattern Swift concurrency checking predates and `nonisolated(unsafe)`
+    // exists specifically to declare, not a data race being papered over.
+    private nonisolated(unsafe) static var cachedPreHash: Data?
+    private nonisolated(unsafe) static var cachedContent: KDBXContent?
+    private nonisolated(unsafe) static var cachedContentDate: Date?
+    private nonisolated(unsafe) static var cachedMirrorDate: Date?
     private static let cacheTTL: TimeInterval = 5 * 60
 
     func beginRequest(with context: NSExtensionContext) {

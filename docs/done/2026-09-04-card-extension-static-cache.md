@@ -71,6 +71,18 @@ Access to the cache was already funneled through one serial queue before this ch
 making the cache itself `static` doesn't add concurrent access, it just makes the cache
 actually shared the way the serialization already assumed.
 
+**Caught by CI, fixed on this branch before merging**: the first push of this fix failed
+`make ci`'s `build` step — Swift 6's strict concurrency checking (`SWIFT_VERSION: "6.1"`
+per `project.yml`) flags a plain `static var` as "not concurrency-safe... nonisolated
+global shared mutable state" unless the enclosing type is actor-isolated.
+`CredentialProviderViewController`'s identical pattern never hits this: it's a UI view
+controller, implicitly `@MainActor`-isolated by the SDK, so the compiler already knows
+every access is single-threaded. `SafariWebExtensionHandler` is a plain `NSObject` with
+no actor isolation, so its static cache needed an explicit `nonisolated(unsafe)` on each
+of the four fields — the correct annotation for exactly this situation (manual
+serial-queue synchronization the compiler can't see through, not an actual data race
+being suppressed), not a workaround. Re-pushed and re-validated green.
+
 ## Verification
 
 Compiled-only (`xcodebuild`, via this repo's `ci` GitHub Actions workflow on
