@@ -146,6 +146,17 @@ private struct QRCodeCameraView: NSViewRepresentable {
     }
 
     func updateNSView(_ nsView: QRCodeCameraPreview, context: Context) {}
+
+    // SwiftUI calls this when the represented NSView leaves the hierarchy — e.g. the
+    // scanner sheet is dismissed (Escape, click-outside, or the parent form's Cancel)
+    // without a QR code ever being recognized. Without this, `metadataOutput`'s
+    // scan-success path was the ONLY place that called `session.stopRunning()`, so an
+    // abandoned scan left the capture session running indefinitely: the camera stays
+    // active and the system's camera-in-use indicator stays lit for a view that's no
+    // longer on screen.
+    static func dismantleNSView(_ nsView: QRCodeCameraPreview, coordinator: ()) {
+        nsView.stopSession()
+    }
 }
 
 @MainActor
@@ -209,7 +220,13 @@ private final class QRCodeCameraPreview: NSView, @MainActor AVCaptureMetadataOut
             return
         }
         didScan = true
-        session.stopRunning()
+        stopSession()
         onCode(code)
+    }
+
+    /// Idempotent — `AVCaptureSession.stopRunning()` is safe to call on an
+    /// already-stopped (or never-started, e.g. camera permission denied) session.
+    func stopSession() {
+        session.stopRunning()
     }
 }
