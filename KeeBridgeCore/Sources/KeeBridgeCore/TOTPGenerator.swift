@@ -26,6 +26,8 @@ public enum TOTPError: Error, CustomStringConvertible {
     case unsupportedType(String)
     case missingSecret
     case invalidBase32Secret
+    case invalidDigits(Int)
+    case invalidPeriod(TimeInterval)
 
     public var description: String {
         switch self {
@@ -33,6 +35,8 @@ public enum TOTPError: Error, CustomStringConvertible {
         case .unsupportedType(let type): return "Unsupported otpauth type: \(type) (only \"totp\" is supported)"
         case .missingSecret: return "otpauth URI has no secret parameter"
         case .invalidBase32Secret: return "Could not Base32-decode the secret"
+        case .invalidDigits(let digits): return "otpauth \"digits\" must be between 1 and 9, got \(digits)"
+        case .invalidPeriod(let period): return "otpauth \"period\" must be a positive, finite number of seconds, got \(period)"
         }
     }
 }
@@ -63,8 +67,32 @@ public enum TOTPGenerator {
         }
 
         let algorithm = TOTPParameters.HMACAlgorithm(rawValue: (query["algorithm"] ?? "SHA1").uppercased()) ?? .sha1
+
         let digits = Int(query["digits"] ?? "") ?? 6
+        // 9 is the largest digit count whose modulus (10^digits) still fits in the
+        // UInt32 `code(for:counter:)` computes with below (10^10 overflows UInt32.max) —
+        // and 0/negative would make that modulus 0 or a fraction, both of which trap on
+        // the `% modulus` below. This isn't just a range preference: an out-of-range
+        // value here would otherwise reach code(for:counter:) and crash the caller (a
+        // Swift integer-overflow/division-by-zero trap, not a throwable error) the next
+        // time this OTP is actually used — see this type's callers for why validating it
+        // here, once, at parse time, is what makes every later `try?`-guarded call site
+        // actually safe.
+        guard (1...9).contains(digits) else {
+            throw TOTPError.invalidDigits(digits)
+        }
+
         let period = TimeInterval(query["period"] ?? "") ?? 30
+        // period feeds a `timeIntervalSince1970 / period` division whose result is
+        // force-converted to UInt64 in currentCode(for:at:) below. period <= 0 makes
+        // that division non-positive-infinite/NaN, and Foundation's TimeInterval(String)
+        // initializer happily parses the literal strings "inf"/"nan" to non-finite
+        // Doubles that would otherwise slip past a naive "?? 30" fallback — either case
+        // traps the UInt64 conversion rather than throwing. Same rationale as `digits`
+        // above: catch it once here, not at every later call site.
+        guard period > 0, period.isFinite else {
+            throw TOTPError.invalidPeriod(period)
+        }
 
         return TOTPParameters(secret: secret, algorithm: algorithm, digits: digits, period: period)
     }

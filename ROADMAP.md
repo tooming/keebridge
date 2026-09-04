@@ -55,6 +55,66 @@
       Unlike the QR/hybrid-transport finding below, this one may become buildable later
       if Apple ships a macOS counterpart — re-check next time `project.yml`'s
       `MACOSX_DEPLOYMENT_TARGET` moves forward.
+- [x] ~~`TOTPGenerator.parse` didn't validate `digits`/`period`, letting a malformed
+      otpauth:// URI crash the process later~~ — done, see
+      `docs/done/2026-09-04-totp-parse-digits-period-validation.md`. Found via a STEP 6b
+      re-survey (second pass, adversarial re-read of already-visited files — the prior
+      cycle's first-pass re-survey had already closed out the "Now / next" lane with
+      three other findings, all merged, before this one turned up). Real crash bug, not
+      hypothetical: `digits`/`period` were parsed with a silent numeric fallback and no
+      range check, so an out-of-range value (e.g. from an adversarial or malformed QR
+      code) sailed through `parse()` only to trap — a Swift runtime crash, not a
+      throwable error — the next time `currentCode`/`code(for:counter:)` actually used
+      it (`UInt64` conversion of a non-finite `Double` for `period <= 0`; integer
+      overflow or division-by-zero in the digits-to-modulus math for out-of-range
+      `digits`). Every existing `try?`/`try` call site (`EntryEditView.swift`'s QR-scan
+      and manual-save validation, `VaultProbe`'s `promptAndValidateOTPURI`,
+      `VaultService.setOTP`) already treats a successful `parse()` as "safe to store,"
+      so this closes the crash vector at every one of them, in one place, with no
+      caller changes needed.
+- [ ] **Security: card autofill has no origin/host binding anywhere in the stack** — any
+      page (including a third-party iframe, since `manifest.json` injects `content.js`
+      into `<all_urls>` with `"all_frames": true`) can list and reveal full payment-card
+      data (number/CVV/expiration/holder) for any card in the vault, via
+      `KeeBridgeCardExtension`. `content.js`'s `nativeRequest` does send `origin:
+      location.origin`, but neither `background.js`'s message listener (which forwards
+      `listCards`/`fillCard` to the native handler for any sender — only `unlock` checks
+      `sender.url`) nor `SafariWebExtensionHandler.handle(_:context:)` ever reads or
+      uses that field, and `VaultPaymentCard`/`PaymentCard.swift` have no concept of a
+      per-entry URL at all, so there's no way to filter "cards relevant to this origin"
+      even if the plumbing wanted to. This is a real regression from the pattern already
+      established elsewhere in this codebase — `CredentialProviderViewController.
+      showList` and passkey registration's `matchingEntries` both filter candidates by
+      host match first. Found via a STEP 6b re-survey (2026-09-04, second/adversarial
+      pass). Moderate — add a `url` to `VaultPaymentCard`/the card-recognition path in
+      `PaymentCard.swift`, thread `origin` from `content.js` through
+      `background.js`/`SafariWebExtensionHandler.swift` and check it against the
+      candidate entries' hosts before listing/filling, mirroring the existing
+      `matchingEntries`/host-match pattern — should fit under ~250 changed lines across
+      the four files. **Flag prominently for priority**: this is a real, currently-live
+      security gap (cross-origin card data exposure), not a hardening nice-to-have —
+      pick this up before other, lower-severity items once buildable-and-scoped.
+      Headless-verification caveat: CI has no JS lint/test step at all (only the Swift
+      targets are built/tested), so a fix here can only be verified by careful code
+      reading, not `make ci` — flag that explicitly as a "still needs a human eyeball"
+      caveat stronger than usual for this item specifically.
+- [ ] `SafariWebExtensionHandler`'s Keychain/content cache (`cachedPreHash`,
+      `cachedContent`, `cachedContentDate`, `cachedMirrorDate`) is declared as plain
+      instance `var`s, not `static` — **PLAUSIBLE, not confirmed headlessly**. Compare
+      `CredentialProviderViewController`, which stores the identical kind of cache as
+      `static` with an explicit comment explaining why: the system creates a fresh
+      controller instance per field, so an instance property "resets every time,
+      defeating the whole point" of the TTL cache. If the system similarly creates a
+      fresh `SafariWebExtensionHandler` instance per native-messaging request (an open
+      question — this repo already discovered that exact assumption was wrong for the
+      sibling extension once), every `listCards`/`fillCard` call would silently miss the
+      cache and either re-prompt Touch ID or fail, despite the code's own comments
+      claiming a 5-minute TTL avoids that. Found via a STEP 6b re-survey (2026-09-04,
+      second/adversarial pass). Trivial fix if the diagnosis holds (`var` → `static
+      var`, ~5 lines) — but verify by inspection/logging before committing to the fix,
+      same as `CredentialProviderViewController`'s own diagnosis originally was; don't
+      apply this one on pattern-matching alone without confirming this extension type's
+      actual instantiation behavior.
 - [x] ~~QR scanner's `AVCaptureSession` never stopped if the scan sheet is dismissed
       without a successful scan~~ — done, see
       `docs/done/2026-09-04-qr-scanner-session-cleanup.md`. Found via a STEP 6b re-survey
