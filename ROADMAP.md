@@ -55,6 +55,18 @@
       Unlike the QR/hybrid-transport finding below, this one may become buildable later
       if Apple ships a macOS counterpart — re-check next time `project.yml`'s
       `MACOSX_DEPLOYMENT_TARGET` moves forward.
+- [x] ~~`TOTPGenerator.parse`'s `.invalidURI`/`.invalidBase32Secret` error branches had
+      zero test coverage~~ — done, see
+      `docs/done/2026-09-04-totp-parse-error-coverage.md`. Found via a third survey pass
+      this run (a doc-accuracy/test-coverage lens, distinct from the two earlier
+      adversarial-logic-bug passes that already closed out six other findings this
+      cycle). `TOTPError` has six cases total; `.unsupportedType`/`.missingSecret` were
+      tested, and `.invalidDigits`/`.invalidPeriod` gained thorough coverage earlier this
+      run, but `.invalidURI` (a non-`otpauth` scheme) and `.invalidBase32Secret` (a
+      `secret=` value with characters outside this type's RFC 4648 alphabet) never had a
+      test of their own. Test-only, no production code changed — the existing guards
+      were already correct, just unverified. Two new `@Test` cases in
+      `TOTPGeneratorTests.swift`.
 - [x] ~~`TOTPGenerator.parse` didn't validate `digits`/`period`, letting a malformed
       otpauth:// URI crash the process later~~ — done, see
       `docs/done/2026-09-04-totp-parse-digits-period-validation.md`. Found via a STEP 6b
