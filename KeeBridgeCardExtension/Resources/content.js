@@ -4,6 +4,32 @@
   if (globalThis.__keeBridgeCardAutofillLoaded) return;
   globalThis.__keeBridgeCardAutofillLoaded = true;
 
+  // manifest.json injects this script into every frame ("all_frames": true), so it
+  // would otherwise also load inside a third-party iframe (an ad, a tracker, or worse
+  // — an overlay deliberately styled to look like a card field). Card data has no
+  // per-entry origin the way a login credential does (a card is legitimately reused
+  // across many unrelated sites), so filtering *which cards* to show can't be the
+  // fix here; the fix is not letting a frame the top-level page doesn't control run
+  // the picker/fill flow at all. A same-origin iframe (e.g. a checkout widget hosted
+  // on the same site) is trusted like the top-level page itself; a cross-origin
+  // iframe is not, and this script exits before attaching anything — no trigger
+  // button ever appears in it, so it can never reach listCards/fillCard.
+  //
+  // window.top is always readable by reference even cross-origin (only its
+  // *properties*, like .location, are Same-Origin-Policy-restricted), so the
+  // self-vs-top comparison is safe unconditionally; reading top.location.origin
+  // throws precisely when top is a different origin, which the catch treats as
+  // untrusted.
+  const isTopLevelOrSameOriginFrame = (() => {
+    if (window.self === window.top) return true;
+    try {
+      return window.top.location.origin === window.location.origin;
+    } catch {
+      return false;
+    }
+  })();
+  if (!isTopLevelOrSameOriginFrame) return;
+
   const api = globalThis.browser;
   let activeField = null;
   let trigger = null;

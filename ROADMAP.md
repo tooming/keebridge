@@ -72,32 +72,36 @@
       `VaultService.setOTP`) already treats a successful `parse()` as "safe to store,"
       so this closes the crash vector at every one of them, in one place, with no
       caller changes needed.
-- [ ] **Security: card autofill has no origin/host binding anywhere in the stack** — any
-      page (including a third-party iframe, since `manifest.json` injects `content.js`
-      into `<all_urls>` with `"all_frames": true`) can list and reveal full payment-card
+- [x] ~~**Security: card autofill has no origin/host binding anywhere in the stack**~~ —
+      done, see `docs/done/2026-09-04-card-picker-cross-origin-iframe-block.md`. Any page
+      (including a third-party iframe, since `manifest.json` injects `content.js` into
+      `<all_urls>` with `"all_frames": true`) could list and reveal full payment-card
       data (number/CVV/expiration/holder) for any card in the vault, via
-      `KeeBridgeCardExtension`. `content.js`'s `nativeRequest` does send `origin:
-      location.origin`, but neither `background.js`'s message listener (which forwards
-      `listCards`/`fillCard` to the native handler for any sender — only `unlock` checks
-      `sender.url`) nor `SafariWebExtensionHandler.handle(_:context:)` ever reads or
-      uses that field, and `VaultPaymentCard`/`PaymentCard.swift` have no concept of a
-      per-entry URL at all, so there's no way to filter "cards relevant to this origin"
-      even if the plumbing wanted to. This is a real regression from the pattern already
-      established elsewhere in this codebase — `CredentialProviderViewController.
-      showList` and passkey registration's `matchingEntries` both filter candidates by
-      host match first. Found via a STEP 6b re-survey (2026-09-04, second/adversarial
-      pass). Moderate — add a `url` to `VaultPaymentCard`/the card-recognition path in
-      `PaymentCard.swift`, thread `origin` from `content.js` through
-      `background.js`/`SafariWebExtensionHandler.swift` and check it against the
-      candidate entries' hosts before listing/filling, mirroring the existing
-      `matchingEntries`/host-match pattern — should fit under ~250 changed lines across
-      the four files. **Flag prominently for priority**: this is a real, currently-live
-      security gap (cross-origin card data exposure), not a hardening nice-to-have —
-      pick this up before other, lower-severity items once buildable-and-scoped.
-      Headless-verification caveat: CI has no JS lint/test step at all (only the Swift
-      targets are built/tested), so a fix here can only be verified by careful code
-      reading, not `make ci` — flag that explicitly as a "still needs a human eyeball"
-      caveat stronger than usual for this item specifically.
+      `KeeBridgeCardExtension`. Found via a STEP 6b re-survey (2026-09-04,
+      second/adversarial pass). **Corrected on implementation**: this item's own
+      original text proposed threading `origin` through `PaymentCard.swift`/
+      `background.js`/`SafariWebExtensionHandler.swift` to filter cards by a per-entry
+      URL, mirroring `CredentialProviderViewController`'s host-matching pattern — on
+      implementation this turned out to be the wrong shape of fix, not just a bigger
+      one: unlike a login credential, a payment card has no natural single "site" (a
+      Visa is legitimately reused across many unrelated merchants), so per-card
+      origin-filtering would either break the feature for every untagged card or (if it
+      fell back to "show all" on zero matches, as `showList` does for its
+      OS-trusted-signal case) not actually close the gap at all, since an attacker's
+      iframe origin would simply never match anything. The actual fix: gate `content.js`
+      itself so it never activates (no trigger, no picker, no way to ever reach
+      `listCards`/`fillCard`) inside a cross-origin iframe — `manifest.json` has no
+      `externally_connectable`, so a webpage's own script cannot call this extension's
+      messaging API directly; the only path in is `content.js`'s own injected instance,
+      so gating its activation by frame trust (top-level, or an iframe same-origin with
+      the top-level page) is a complete, non-bypassable fix, not defense-in-depth on top
+      of a bigger one. ~20 changed lines in `content.js` only — no native/Swift changes
+      needed. Headless-verification caveat: CI has no JS lint/test step (only the Swift
+      targets are built/tested), so this was verified by careful reading of the
+      WebExtension frame/Same-Origin-Policy semantics involved (`window.top`'s
+      reference is always safely readable even cross-origin; only its `.location`
+      properties are SOP-restricted, which is exactly what the trust check relies on),
+      not `make ci` — flagged as a "still needs a human eyeball" caveat in the PR.
 - [ ] `SafariWebExtensionHandler`'s Keychain/content cache (`cachedPreHash`,
       `cachedContent`, `cachedContentDate`, `cachedMirrorDate`) is declared as plain
       instance `var`s, not `static` — **PLAUSIBLE, not confirmed headlessly**. Compare
