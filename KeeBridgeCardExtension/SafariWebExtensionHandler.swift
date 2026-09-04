@@ -15,10 +15,29 @@ final class SafariWebExtensionHandler: NSObject, NSExtensionRequestHandling {
         label: "com.martintooming.KeeBridge.CardExtension.work",
         qos: .userInitiated
     )
-    private var cachedPreHash: Data?
-    private var cachedContent: KDBXContent?
-    private var cachedContentDate: Date?
-    private var cachedMirrorDate: Date?
+    // STATIC, not instance: Safari Web Extension native messaging
+    // (`sendNativeMessage`, which `background.js` uses — this extension
+    // never opens a `connectNative` port) spins up a fresh extension
+    // process, and evidence points to a fresh principal-class instance,
+    // per request — Apple's own App Extension Programming Guide describes
+    // a non-UI extension being instantiated to handle one request and then
+    // terminated, and independent developer reports of
+    // `SafariWebExtensionHandler` specifically ("SafariWebExtensionHandler
+    // creates new object for every request", Apple Developer Forums thread
+    // 696134) describe exactly this. Same failure mode this codebase
+    // already found and fixed once for `CredentialProviderViewController`'s
+    // identical kind of cache: an instance property would reset on every
+    // single `listCards`/`fillCard`/`unlock` call, silently defeating the
+    // whole point of a TTL'd Touch-ID/decrypt cache — re-prompting Touch ID
+    // (or failing outright, since `unlockedContent`'s no-cached-password
+    // fallback path re-reads Keychain, not re-prompts) on every card
+    // request despite the code's own comments claiming a cache exists.
+    // Kept for the lifetime of the extension process only — never
+    // persisted to disk.
+    private static var cachedPreHash: Data?
+    private static var cachedContent: KDBXContent?
+    private static var cachedContentDate: Date?
+    private static var cachedMirrorDate: Date?
     private static let cacheTTL: TimeInterval = 5 * 60
 
     func beginRequest(with context: NSExtensionContext) {
@@ -97,10 +116,10 @@ final class SafariWebExtensionHandler: NSObject, NSExtensionRequestHandling {
 
     private func unlockedContent(at url: URL, password: String?) throws -> KDBXContent? {
         let mirrorDate = try? url.resourceValues(forKeys: [.contentModificationDateKey]).contentModificationDate
-        if let content = cachedContent,
-           let cachedAt = cachedContentDate,
+        if let content = Self.cachedContent,
+           let cachedAt = Self.cachedContentDate,
            Date().timeIntervalSince(cachedAt) < Self.cacheTTL,
-           mirrorDate == cachedMirrorDate {
+           mirrorDate == Self.cachedMirrorDate {
             return content
         }
 
@@ -117,7 +136,7 @@ final class SafariWebExtensionHandler: NSObject, NSExtensionRequestHandling {
             } catch {
                 throw error
             }
-        } else if let cached = cachedPreHash {
+        } else if let cached = Self.cachedPreHash {
             preHash = cached
         } else {
             do {
@@ -140,7 +159,7 @@ final class SafariWebExtensionHandler: NSObject, NSExtensionRequestHandling {
             cache(content: content, preHash: preHash, mirrorDate: mirrorDate)
             return content
         } catch {
-            cachedPreHash = nil
+            Self.cachedPreHash = nil
             keychainOnMain {
                 keychain.delete(account: KeeBridgeConfig.cardExtensionKeychainAccount)
             }
@@ -149,10 +168,10 @@ final class SafariWebExtensionHandler: NSObject, NSExtensionRequestHandling {
     }
 
     private func cache(content: KDBXContent, preHash: Data, mirrorDate: Date?) {
-        cachedContent = content
-        cachedContentDate = Date()
-        cachedMirrorDate = mirrorDate
-        cachedPreHash = preHash
+        Self.cachedContent = content
+        Self.cachedContentDate = Date()
+        Self.cachedMirrorDate = mirrorDate
+        Self.cachedPreHash = preHash
     }
 
     private func keychainOnMain<T>(_ operation: () throws -> T) rethrows -> T {

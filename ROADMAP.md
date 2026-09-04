@@ -102,23 +102,30 @@
       reference is always safely readable even cross-origin; only its `.location`
       properties are SOP-restricted, which is exactly what the trust check relies on),
       not `make ci` — flagged as a "still needs a human eyeball" caveat in the PR.
-- [ ] `SafariWebExtensionHandler`'s Keychain/content cache (`cachedPreHash`,
-      `cachedContent`, `cachedContentDate`, `cachedMirrorDate`) is declared as plain
-      instance `var`s, not `static` — **PLAUSIBLE, not confirmed headlessly**. Compare
-      `CredentialProviderViewController`, which stores the identical kind of cache as
-      `static` with an explicit comment explaining why: the system creates a fresh
-      controller instance per field, so an instance property "resets every time,
-      defeating the whole point" of the TTL cache. If the system similarly creates a
-      fresh `SafariWebExtensionHandler` instance per native-messaging request (an open
-      question — this repo already discovered that exact assumption was wrong for the
-      sibling extension once), every `listCards`/`fillCard` call would silently miss the
-      cache and either re-prompt Touch ID or fail, despite the code's own comments
-      claiming a 5-minute TTL avoids that. Found via a STEP 6b re-survey (2026-09-04,
-      second/adversarial pass). Trivial fix if the diagnosis holds (`var` → `static
-      var`, ~5 lines) — but verify by inspection/logging before committing to the fix,
-      same as `CredentialProviderViewController`'s own diagnosis originally was; don't
-      apply this one on pattern-matching alone without confirming this extension type's
-      actual instantiation behavior.
+- [x] ~~`SafariWebExtensionHandler`'s Keychain/content cache (`cachedPreHash`,
+      `cachedContent`, `cachedContentDate`, `cachedMirrorDate`) was declared as plain
+      instance `var`s, not `static`~~ — done, see
+      `docs/done/2026-09-04-card-extension-static-cache.md`. Originally flagged
+      PLAUSIBLE, not confirmed headlessly, pending exactly this kind of verification.
+      **Confirmed before implementing** (not applied on pattern-matching alone): Apple's
+      own App Extension Programming Guide describes a non-UI app extension being
+      instantiated to handle one request and then terminated, Safari Web Extension
+      native messaging (`sendNativeMessage`, which `background.js` uses — this extension
+      never opens a `connectNative` port) spins up a fresh extension process per
+      message, and an independent developer report specifically about
+      `SafariWebExtensionHandler` ("SafariWebExtensionHandler creates new object for
+      every request", Apple Developer Forums thread 696134) describes exactly this —
+      three independent sources converging on the same conclusion, the same standard
+      this ROADMAP already applies to other platform-behavior questions it can't test on
+      real hardware. Fixed: all four cache fields are now `static var`
+      (`CredentialProviderViewController`'s exact established pattern, including its
+      `Self.`-qualified read/write convention), so the cache now actually persists
+      across the fresh instance each `listCards`/`fillCard`/`unlock` request gets,
+      instead of silently resetting on every single one. All cache access already ran
+      through the handler's existing `static` serial `workQueue`, so making the cache
+      itself `static` introduces no new thread-safety surface — access was already
+      serialized onto one queue, now just visibly shared state instead of accidentally
+      non-shared state.
 - [x] ~~QR scanner's `AVCaptureSession` never stopped if the scan sheet is dismissed
       without a successful scan~~ — done, see
       `docs/done/2026-09-04-qr-scanner-session-cleanup.md`. Found via a STEP 6b re-survey
