@@ -97,6 +97,28 @@ func promptEntryPassword() throws -> String {
     return String(cString: passwordCString)
 }
 
+/// Prompts for a TOTP setup URI via `getpass()` — same no-echo/no-history/no-argv
+/// discipline as the password prompts above. The URI embeds a shared TOTP secret
+/// (`otpauth://totp/...?secret=...`), which is exactly as sensitive as the entry's
+/// password, so it gets the same treatment: never a plain CLI argument (that would leak
+/// it into shell history and any `ps` output for the process's lifetime). A blank answer
+/// is a valid, deliberate result (see each call site: "no TOTP secret" on `create`,
+/// "remove the existing one" on `update`), validated only when non-blank. Used by
+/// `create --set-otp`/`update --set-otp`.
+func promptAndValidateOTPURI() throws -> String {
+    guard let uriCString = getpass("New TOTP setup URI (otpauth://totp/..., leave blank for none): ") else {
+        throw ValidationError("Could not read OTP URI (no controlling TTY?).")
+    }
+    let uri = String(cString: uriCString)
+    guard !uri.isEmpty else { return uri }
+    do {
+        _ = try TOTPGenerator.parse(otpauthURI: uri)
+    } catch {
+        throw ValidationError("That is not a valid otpauth:// setup URI: \(error)")
+    }
+    return uri
+}
+
 /// Encodes `value` as pretty-printed, key-sorted JSON and prints it to
 /// stdout. Sorted keys keep `--json` output byte-stable across runs (no
 /// dictionary-ordering nondeterminism) for anyone diffing or snapshotting it.
@@ -358,7 +380,10 @@ struct CardCommand: ParsableCommand {
 struct CreateCommand: ParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "create",
-        abstract: "Create a new entry. The entry's password is prompted separately via --set-password, never a CLI argument."
+        abstract: """
+        Create a new entry. The entry's password and any TOTP setup URI are prompted \
+        separately via --set-password/--set-otp, never a CLI argument.
+        """
     )
 
     struct JSONOutput: Encodable {
@@ -371,23 +396,19 @@ struct CreateCommand: ParsableCommand {
     @Option(name: .long, help: "Entry username.") var username: String = ""
     @Option(name: .long, help: "Entry URL.") var url: String = ""
     @Option(name: .long, help: "Entry notes.") var notes: String = ""
-    @Option(
-        name: .customLong("otp-uri"),
-        help: "TOTP setup URI (otpauth://totp/...) to store in the entry's `otp` field. Omit to create the entry with no TOTP secret."
-    )
-    var otpURI: String?
     @Flag(name: .long, help: "Prompt (via getpass) for the entry's password. Omit to create it with no password.")
     var setPassword: Bool = false
+    @Flag(
+        name: .customLong("set-otp"),
+        help: "Prompt (via getpass) for a TOTP setup URI (otpauth://totp/...) to store in the entry's `otp` field. Omit to create the entry with no TOTP secret."
+    )
+    var setOTP: Bool = false
 
     mutating func run() throws {
-        if let otpURI, !otpURI.isEmpty {
-            do { _ = try TOTPGenerator.parse(otpauthURI: otpURI) } catch {
-                throw ValidationError("--otp-uri is not a valid otpauth:// setup URI: \(error)")
-            }
-        }
         let vaultURL = try vault.resolved()
         let vaultPassword = try promptPassword(for: vaultURL)
         let entryPassword = setPassword ? try promptEntryPassword() : ""
+        let otpURI: String? = setOTP ? try promptAndValidateOTPURI() : nil
 
         let draft = VaultService.EntryDraft(
             title: title, username: username, password: entryPassword, url: url, notes: notes, otpURI: otpURI
@@ -410,8 +431,8 @@ struct UpdateCommand: ParsableCommand {
         overwrites the ones you pass a flag for — an omitted flag keeps its existing \
         value (updateEntry itself replaces all fields, so this reveal-then-merge step \
         is what stops an omitted flag from silently blanking that field). The password \
-        is only touched if you pass --set-password (prompted separately, never a CLI \
-        argument).
+        and any TOTP setup URI are only touched if you pass --set-password/--set-otp \
+        (prompted separately, never a CLI argument).
         """
     )
 
@@ -427,23 +448,19 @@ struct UpdateCommand: ParsableCommand {
     @Option(name: .long, help: "New username. Omit to keep the existing username.") var username: String?
     @Option(name: .long, help: "New URL. Omit to keep the existing URL.") var url: String?
     @Option(name: .long, help: "New notes. Omit to keep the existing notes.") var notes: String?
-    @Option(
-        name: .customLong("otp-uri"),
-        help: """
-        New TOTP setup URI (otpauth://totp/...) to store in the entry's `otp` field. Omit \
-        to keep the existing TOTP secret (if any); pass an empty string to remove it.
-        """
-    )
-    var otpURI: String?
     @Flag(name: .long, help: "Prompt (via getpass) for a new password. Omit to keep the existing password.")
     var setPassword: Bool = false
+    @Flag(
+        name: .customLong("set-otp"),
+        help: """
+        Prompt (via getpass) for a new TOTP setup URI (otpauth://totp/...). Leave the \
+        prompt blank to remove the entry's existing TOTP secret. Omit this flag entirely \
+        to keep the existing TOTP secret (if any) untouched.
+        """
+    )
+    var setOTP: Bool = false
 
     mutating func run() throws {
-        if let otpURI, !otpURI.isEmpty {
-            do { _ = try TOTPGenerator.parse(otpauthURI: otpURI) } catch {
-                throw ValidationError("--otp-uri is not a valid otpauth:// setup URI: \(error)")
-            }
-        }
         let vaultURL = try vault.resolved()
         let vaultPassword = try promptPassword(for: vaultURL)
         let service = VaultService()
@@ -453,9 +470,13 @@ struct UpdateCommand: ParsableCommand {
 
         // otpURI is intentionally NOT merged against `current.otpURI` like the other
         // fields above: EntryDraft's own contract (see its doc comment) already treats
-        // nil as "preserve" and "" as "remove" at the updateEntry layer, so forwarding
-        // this flag's raw value (nil when omitted) is exactly the reveal-then-merge
-        // behavior this command promises, with no extra logic needed.
+        // nil as "preserve" and "" as "remove" at the updateEntry layer, and
+        // promptAndValidateOTPURI() returning "" (a blank prompt answer) is exactly the
+        // "remove" signal — so forwarding its raw result (nil when --set-otp wasn't
+        // passed at all) is already the correct reveal-then-merge behavior for this one
+        // field, no extra logic needed.
+        let otpURI: String? = setOTP ? try promptAndValidateOTPURI() : nil
+
         let merged = VaultService.EntryDraft(
             title: title ?? current.title,
             username: username ?? current.username,

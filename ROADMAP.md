@@ -73,18 +73,23 @@
       rule.
 - [x] ~~`VaultProbe` OTP write parity~~ — done, see
       `docs/done/2026-09-04-vaultprobe-otp-write-parity.md`. `CreateCommand`/
-      `UpdateCommand` had no `--otp-uri` flag, so there was no CLI path to create an entry
-      with a TOTP secret, add one to an existing entry, or remove one, even though
-      `VaultService.EntryDraft.otpURI` and its nil-preserves/empty-removes/non-empty-sets
-      contract were already fully implemented and unit-tested
-      (`entryDraftRoundTripsOTPURI` in `VaultWritingTests.swift`) and the app's own
-      `EntryEditView` already exposed a full OTP section. Fixed: both commands now take
-      `--otp-uri`, validated via `TOTPGenerator.parse` when non-empty (same validation
-      `EntryEditView` does before saving), threaded straight into `EntryDraft(otpURI:)` —
-      `update` forwards the flag's raw value (nil when omitted) with no extra
-      reveal-then-merge logic, since `EntryDraft`'s own nil-preserves contract already
-      does the right thing at the `updateEntry` layer. Also fixes the doc-accuracy gap
-      this item flagged: `README.md`'s claim of read/write parity between the app UI and
+      `UpdateCommand` had no way to set an entry's TOTP secret, so there was no CLI path
+      to create an entry with one, add one to an existing entry, or remove one, even
+      though `VaultService.EntryDraft.otpURI` and its
+      nil-preserves/empty-removes/non-empty-sets contract were already fully implemented
+      and unit-tested (`entryDraftRoundTripsOTPURI` in `VaultWritingTests.swift`) and the
+      app's own `EntryEditView` already exposed a full OTP section. Fixed: both commands
+      now take `--set-otp` (a `getpass()`-prompted flag, not a plain option — self-review
+      caught that a direct `--otp-uri <value>` CLI argument, this item's original design,
+      would leak the entry's TOTP secret into shell history/`ps` output, the exact class
+      of exposure `--set-password` already exists to avoid for the entry's password;
+      fixed before merging by mirroring that same prompt-based pattern instead), threaded
+      straight into `EntryDraft(otpURI:)`, validated via `TOTPGenerator.parse` when the
+      prompt answer is non-blank. `update` forwards the prompt's raw result (nil when
+      `--set-otp` wasn't passed at all) with no extra reveal-then-merge logic, since
+      `EntryDraft`'s own nil-preserves/empty-removes contract already does the right
+      thing at the `updateEntry` layer. Also fixes the doc-accuracy gap this item
+      flagged: `README.md`'s claim of read/write parity between the app UI and
       `VaultProbe` now actually holds for this field.
 - [ ] Test coverage for `PaymentCard.revealPaymentCardFields`'s split-field → combined
       `.expiration` synthesis branch (`result[field] = "\(month)/\(year)"` when an entry

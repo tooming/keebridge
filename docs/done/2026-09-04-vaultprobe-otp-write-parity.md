@@ -23,25 +23,39 @@ feature.
 
 ## The fix
 
-Both `CreateCommand` and `UpdateCommand` gained an `--otp-uri` option
-(`String?`, `nil` default — matching `EntryDraft.otpURI`'s own contract exactly):
+Both `CreateCommand` and `UpdateCommand` gained a `--set-otp` flag:
 
-- **Validation**: when the flag is given a non-empty value, it's parsed with
-  `TOTPGenerator.parse(otpauthURI:)` before anything else runs — the same check
+- **Prompted, not a plain CLI argument**: the first implementation of this item (still
+  visible in this PR's earlier commits) took the URI as a direct `--otp-uri <value>`
+  option. STEP 7 self-review caught that this leaks the entry's TOTP secret into shell
+  history and any `ps` output for the process's lifetime — exactly the exposure
+  `--set-password` already exists to spare the entry's *password* from (see the file's
+  own header comment: "the entry's *password* is never a CLI argument. Pass
+  `--set-password` instead and a second `getpass()` prompt asks for it"). A TOTP secret
+  is exactly as sensitive as a password, so it gets the same treatment: `--set-otp` is a
+  boolean flag that triggers a new `promptAndValidateOTPURI()` helper
+  (`getpass()`-based, same no-echo/no-history/no-argv discipline as
+  `promptPassword`/`promptEntryPassword`), fixed on this branch before merging — see this
+  PR's own self-review comment.
+- **Validation**: a non-blank prompt answer is parsed with
+  `TOTPGenerator.parse(otpauthURI:)` before it's used for anything — the same check
   `EntryEditView` does before saving — so a malformed URI fails fast with a clear
-  `ValidationError` instead of being silently stored.
-- **`create`**: the flag's value is passed straight into `EntryDraft(otpURI:)`.
-- **`update`**: the flag's value is also passed straight through — deliberately *not*
-  merged against the entry's current `otpURI` the way `title`/`username`/`url`/`notes`
-  are. Those four are merged (`title ?? current.title`, etc.) because they're plain,
-  non-optional `String`s in `EntryDraft` and `updateEntry` fully replaces the standard
-  fields, so the CLI's reveal-then-merge step is what stops an omitted flag from silently
-  blanking one. `otpURI` doesn't need that: `EntryDraft`'s own contract already treats
-  `nil` as "preserve" at the `updateEntry` layer (confirmed by reading
-  `VaultService.updateEntry`'s `preservedCustomFields` filter and `draftStrings` directly:
-  `nil` keeps the existing `otp` string untouched, `""` drops it, a non-empty value
-  replaces it), so forwarding the flag's raw value already *is* the correct
-  reveal-then-merge behavior for this one field.
+  `ValidationError` instead of being silently stored. A blank answer is a valid,
+  deliberate result, not a validation failure.
+- **`create`**: `--set-otp` omitted → `otpURI: nil` (no TOTP secret created). `--set-otp`
+  passed, prompt left blank → same as omitted. `--set-otp` passed, a URI entered →
+  validated and set.
+- **`update`**: the prompt's raw result is forwarded straight through — deliberately
+  *not* merged against the entry's current `otpURI` the way `title`/`username`/`url`/
+  `notes` are. Those four are merged (`title ?? current.title`, etc.) because they're
+  plain, non-optional `String`s in `EntryDraft` and `updateEntry` fully replaces the
+  standard fields, so the CLI's reveal-then-merge step is what stops an omitted flag from
+  silently blanking one. `otpURI` doesn't need that: `EntryDraft`'s own contract already
+  treats `nil` as "preserve" and `""` as "remove" at the `updateEntry` layer (confirmed by
+  reading `VaultService.updateEntry`'s `preservedCustomFields` filter and `draftStrings`
+  directly), and `promptAndValidateOTPURI()` returning `""` for a blank prompt answer is
+  exactly the "remove" signal — so `--set-otp` omitted → `nil` (preserve), `--set-otp`
+  passed with a blank answer → `""` (remove), `--set-otp` passed with a URI → set.
 
 ## Verification
 
