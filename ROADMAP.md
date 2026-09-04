@@ -91,16 +91,20 @@
       thing at the `updateEntry` layer. Also fixes the doc-accuracy gap this item
       flagged: `README.md`'s claim of read/write parity between the app UI and
       `VaultProbe` now actually holds for this field.
-- [ ] Test coverage for `PaymentCard.revealPaymentCardFields`'s split-field → combined
-      `.expiration` synthesis branch (`result[field] = "\(month)/\(year)"` when an entry
-      has separate `Expiration Month`/`Expiration Year` fields but no combined
-      `Expiration Date` field) — this is live, secret-touching, extension-reachable code
-      (`KeeBridgeCardExtension`'s `content.js` requests `"expiration"` for any
-      `autocomplete="cc-exp"` field) with zero test coverage; only the opposite
-      direction (combined field → split `.expirationMonth`/`.expirationYear`) is
-      currently tested (`paymentCardListingIsMetadataOnlyAndRevealIsRequestScoped` in
-      `PaymentCardTests.swift`). Found via the same 2026-09-04 STEP 6b re-survey. Small,
-      test-only — add `@Test` case(s) to `PaymentCardTests.swift`.
+- [x] ~~Test coverage for `PaymentCard.revealPaymentCardFields`'s split-field → combined
+      `.expiration` synthesis branch~~ — done, see
+      `docs/done/2026-09-04-paymentcard-expiration-synthesis-tests.md`. This branch
+      (`result[field] = "\(month)/\(year)"` when an entry has separate `Expiration
+      Month`/`Expiration Year` fields but no combined `Expiration Date` field) is live,
+      secret-touching, extension-reachable code (`KeeBridgeCardExtension`'s `content.js`
+      requests `"expiration"` for any `autocomplete="cc-exp"` field) that had zero test
+      coverage — only the opposite direction (combined field → split
+      `.expirationMonth`/`.expirationYear`) was previously tested. Fixed: two new
+      `@Test` cases in `PaymentCardTests.swift` — the happy path (both split fields
+      present → correctly combined) and a defensive case (only one split field present →
+      `.expiration` correctly omitted rather than emitting a malformed `"04/"` value,
+      confirming the `if let month = ..., let year = ...` guard's both-or-nothing
+      behavior).
 - [x] ~~Passkey support: storage convention + platform-risk design spike (#4)~~ — done,
       see `docs/done/2026-08-26-passkey-design-spike.md`, **corrected next cycle**: the
       storage-convention finding there (a `webauthn.pem` file attachment) was wrong —

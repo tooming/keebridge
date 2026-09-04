@@ -139,3 +139,64 @@ import KDBXKit
     #expect(PaymentCardField.number.displayName == "Card Number")
     #expect(PaymentCardField.verificationCode.displayName == "CVV / Security Code")
 }
+
+// MARK: - revealPaymentCardFields split-field <-> combined .expiration synthesis
+//
+// revealPaymentCardFields synthesizes in both directions when a requested field isn't
+// stored directly: combined "Expiration Date" -> split .expirationMonth/.expirationYear
+// (already covered above, via paymentCardListingIsMetadataOnlyAndRevealIsRequestScoped's
+// .expirationMonth request against an "expirationDate" field) and, the opposite
+// direction, split "Expiration Month"/"Expiration Year" -> combined .expiration. That
+// second direction is live, secret-touching, extension-reachable code
+// (KeeBridgeCardExtension's content.js requests "expiration" for any autocomplete="cc-exp"
+// field) but had no test coverage at all before these two.
+
+@Test func revealPaymentCardFieldsSynthesizesCombinedExpirationFromSplitFields() throws {
+    var content = KDBXContent.makeEmpty(databaseName: "Split Expiration Test")
+    let cardID = UUID()
+    content.database.root.group.entries.append(KDBX.Entry(
+        uuid: cardID,
+        times: KDBX.Times(),
+        strings: [
+            KDBX.ProtectedString(key: "Title", value: .regular("Split Expiry Card")),
+            KDBX.ProtectedString(key: "Card Number", value: .regular("4111111111111111")),
+            KDBX.ProtectedString(key: "Expiration Month", value: .regular("04")),
+            KDBX.ProtectedString(key: "Expiration Year", value: .regular("2029")),
+        ]
+    ))
+
+    let service = VaultService()
+    let fields = try #require(service.revealPaymentCardFields(
+        in: content,
+        entryUUID: "\(cardID)",
+        fields: [.expiration]
+    ))
+    #expect(fields == [.expiration: "04/2029"])
+}
+
+@Test func revealPaymentCardFieldsOmitsCombinedExpirationWhenOnlyOneSplitFieldIsPresent() throws {
+    var content = KDBXContent.makeEmpty(databaseName: "Partial Split Expiration Test")
+    let cardID = UUID()
+    content.database.root.group.entries.append(KDBX.Entry(
+        uuid: cardID,
+        times: KDBX.Times(),
+        strings: [
+            KDBX.ProtectedString(key: "Title", value: .regular("Month Only Card")),
+            KDBX.ProtectedString(key: "Card Number", value: .regular("4111111111111111")),
+            KDBX.ProtectedString(key: "Expiration Month", value: .regular("04")),
+        ]
+    ))
+
+    let service = VaultService()
+    // "number" + "Expiration Month" alone is enough to be recognized as a card (per
+    // PaymentCardField.isRecognizedCard), but revealPaymentCardFields still can't
+    // synthesize a combined .expiration without a year — it should omit the field
+    // rather than emit a malformed "04/" value.
+    let fields = try #require(service.revealPaymentCardFields(
+        in: content,
+        entryUUID: "\(cardID)",
+        fields: [.expiration, .expirationMonth]
+    ))
+    #expect(fields[.expiration] == nil)
+    #expect(fields[.expirationMonth] == "04")
+}
