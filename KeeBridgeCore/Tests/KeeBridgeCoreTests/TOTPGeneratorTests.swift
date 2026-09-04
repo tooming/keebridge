@@ -68,6 +68,26 @@ private let rfc6238SHA1Secret = Data("12345678901234567890".utf8)
     }
 }
 
+@Test func rejectsNonOtpauthScheme() {
+    // Distinct from rejectsNonTotpURI above: that one has scheme "otpauth" but an
+    // unsupported host ("hotp"), hitting the *second* guard (.unsupportedType). This
+    // exercises the *first* guard — a URI whose scheme isn't "otpauth" at all — which
+    // had no coverage of its own before this test.
+    #expect(throws: TOTPError.self) {
+        try TOTPGenerator.parse(otpauthURI: "https://totp/Example:alice?secret=GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ")
+    }
+}
+
+@Test func rejectsInvalidBase32Secret() {
+    // "1" is not in this type's Base32 alphabet (RFC 4648's is A-Z and 2-7; the
+    // digits 0/1/8/9 are deliberately excluded to avoid visual confusion with O/I/B/S/Z
+    // in real authenticator apps) — base32Decode returns nil, so parse() must throw
+    // rather than silently produce a garbage/empty secret.
+    #expect(throws: TOTPError.self) {
+        try TOTPGenerator.parse(otpauthURI: "otpauth://totp/Example:alice?secret=11118")
+    }
+}
+
 // MARK: - digits/period validation
 //
 // Regression coverage for a real crash: digits/period used to be parsed with a
