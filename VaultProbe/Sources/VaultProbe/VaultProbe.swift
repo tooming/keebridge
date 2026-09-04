@@ -371,15 +371,27 @@ struct CreateCommand: ParsableCommand {
     @Option(name: .long, help: "Entry username.") var username: String = ""
     @Option(name: .long, help: "Entry URL.") var url: String = ""
     @Option(name: .long, help: "Entry notes.") var notes: String = ""
+    @Option(
+        name: .customLong("otp-uri"),
+        help: "TOTP setup URI (otpauth://totp/...) to store in the entry's `otp` field. Omit to create the entry with no TOTP secret."
+    )
+    var otpURI: String?
     @Flag(name: .long, help: "Prompt (via getpass) for the entry's password. Omit to create it with no password.")
     var setPassword: Bool = false
 
     mutating func run() throws {
+        if let otpURI, !otpURI.isEmpty {
+            do { _ = try TOTPGenerator.parse(otpauthURI: otpURI) } catch {
+                throw ValidationError("--otp-uri is not a valid otpauth:// setup URI: \(error)")
+            }
+        }
         let vaultURL = try vault.resolved()
         let vaultPassword = try promptPassword(for: vaultURL)
         let entryPassword = setPassword ? try promptEntryPassword() : ""
 
-        let draft = VaultService.EntryDraft(title: title, username: username, password: entryPassword, url: url, notes: notes)
+        let draft = VaultService.EntryDraft(
+            title: title, username: username, password: entryPassword, url: url, notes: notes, otpURI: otpURI
+        )
         let newUUID = try VaultService().createEntry(draft, at: vaultURL, masterPassword: vaultPassword)
 
         if output.json {
@@ -415,10 +427,23 @@ struct UpdateCommand: ParsableCommand {
     @Option(name: .long, help: "New username. Omit to keep the existing username.") var username: String?
     @Option(name: .long, help: "New URL. Omit to keep the existing URL.") var url: String?
     @Option(name: .long, help: "New notes. Omit to keep the existing notes.") var notes: String?
+    @Option(
+        name: .customLong("otp-uri"),
+        help: """
+        New TOTP setup URI (otpauth://totp/...) to store in the entry's `otp` field. Omit \
+        to keep the existing TOTP secret (if any); pass an empty string to remove it.
+        """
+    )
+    var otpURI: String?
     @Flag(name: .long, help: "Prompt (via getpass) for a new password. Omit to keep the existing password.")
     var setPassword: Bool = false
 
     mutating func run() throws {
+        if let otpURI, !otpURI.isEmpty {
+            do { _ = try TOTPGenerator.parse(otpauthURI: otpURI) } catch {
+                throw ValidationError("--otp-uri is not a valid otpauth:// setup URI: \(error)")
+            }
+        }
         let vaultURL = try vault.resolved()
         let vaultPassword = try promptPassword(for: vaultURL)
         let service = VaultService()
@@ -426,12 +451,18 @@ struct UpdateCommand: ParsableCommand {
         let current = try service.revealEntry(uuid: entryUUID, at: vaultURL, masterPassword: vaultPassword)
         let newPassword = setPassword ? try promptEntryPassword() : current.password
 
+        // otpURI is intentionally NOT merged against `current.otpURI` like the other
+        // fields above: EntryDraft's own contract (see its doc comment) already treats
+        // nil as "preserve" and "" as "remove" at the updateEntry layer, so forwarding
+        // this flag's raw value (nil when omitted) is exactly the reveal-then-merge
+        // behavior this command promises, with no extra logic needed.
         let merged = VaultService.EntryDraft(
             title: title ?? current.title,
             username: username ?? current.username,
             password: newPassword,
             url: url ?? current.url,
-            notes: notes ?? current.notes
+            notes: notes ?? current.notes,
+            otpURI: otpURI
         )
         try service.updateEntry(uuid: entryUUID, applying: merged, at: vaultURL, masterPassword: vaultPassword)
 

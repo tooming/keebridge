@@ -71,18 +71,21 @@
       ROADMAP; confirming the camera indicator actually turns off needs real hardware,
       flagged as a "still needs a human eyeball" caveat in the PR per the HEADLESS ONLY
       rule.
-- [ ] `VaultProbe` OTP write parity — `CreateCommand`/`UpdateCommand` have no `--otp-uri`
-      flag, so there is no CLI path to create an entry with a TOTP secret, add one to an
-      existing entry, or remove one, even though `VaultService.EntryDraft.otpURI` and its
-      nil-preserves/empty-removes/non-empty-sets contract are already fully implemented
-      and unit-tested (`entryDraftRoundTripsOTPURI` in `VaultWritingTests.swift`) and the
-      app's own `EntryEditView` already exposes a full OTP section. `reveal`/`totp` can
-      already read OTP secrets; `create`/`update` can't write them. Also a doc-accuracy
-      gap: `README.md` claims read/write parity between the app UI and `VaultProbe` that
-      doesn't actually hold for this field. Found via the same 2026-09-04 STEP 6b
-      re-survey as the item above. Small — add `--otp-uri` to both commands, threading
-      straight into `EntryDraft(otpURI:)` (already-tested nil/empty/non-empty semantics
-      need no new logic).
+- [x] ~~`VaultProbe` OTP write parity~~ — done, see
+      `docs/done/2026-09-04-vaultprobe-otp-write-parity.md`. `CreateCommand`/
+      `UpdateCommand` had no `--otp-uri` flag, so there was no CLI path to create an entry
+      with a TOTP secret, add one to an existing entry, or remove one, even though
+      `VaultService.EntryDraft.otpURI` and its nil-preserves/empty-removes/non-empty-sets
+      contract were already fully implemented and unit-tested
+      (`entryDraftRoundTripsOTPURI` in `VaultWritingTests.swift`) and the app's own
+      `EntryEditView` already exposed a full OTP section. Fixed: both commands now take
+      `--otp-uri`, validated via `TOTPGenerator.parse` when non-empty (same validation
+      `EntryEditView` does before saving), threaded straight into `EntryDraft(otpURI:)` —
+      `update` forwards the flag's raw value (nil when omitted) with no extra
+      reveal-then-merge logic, since `EntryDraft`'s own nil-preserves contract already
+      does the right thing at the `updateEntry` layer. Also fixes the doc-accuracy gap
+      this item flagged: `README.md`'s claim of read/write parity between the app UI and
+      `VaultProbe` now actually holds for this field.
 - [ ] Test coverage for `PaymentCard.revealPaymentCardFields`'s split-field → combined
       `.expiration` synthesis branch (`result[field] = "\(month)/\(year)"` when an entry
       has separate `Expiration Month`/`Expiration Year` fields but no combined
