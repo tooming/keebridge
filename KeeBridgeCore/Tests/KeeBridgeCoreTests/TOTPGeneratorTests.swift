@@ -67,3 +67,59 @@ private let rfc6238SHA1Secret = Data("12345678901234567890".utf8)
         try TOTPGenerator.parse(otpauthURI: "otpauth://totp/Example:alice")
     }
 }
+
+// MARK: - digits/period validation
+//
+// Regression coverage for a real crash: digits/period used to be parsed with a
+// silent numeric fallback and no range check, so an out-of-range value (a
+// malformed or adversarial QR code/otpauth URI) sailed through parse() only to
+// trap — an uncatchable Swift runtime crash, not a throwable error — the next
+// time currentCode(for:at:)/code(for:counter:) actually used it (UInt64
+// conversion of a non-finite Double for period<=0, or integer overflow/
+// division-by-zero in the digits-to-modulus math for out-of-range digits).
+// These cases must be rejected at parse() time, before that can happen.
+
+@Test func acceptsDigitsAtTheSupportedBoundary() throws {
+    // 9 is the largest digit count whose 10^digits modulus still fits UInt32
+    // (10^10 overflows UInt32.max) — see parse()'s own comment.
+    let uri = "otpauth://totp/Example:alice?secret=GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ&digits=9"
+    let params = try TOTPGenerator.parse(otpauthURI: uri)
+    #expect(params.digits == 9)
+}
+
+@Test func rejectsDigitsTooLarge() {
+    let uri = "otpauth://totp/Example:alice?secret=GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ&digits=10"
+    #expect(throws: TOTPError.self) {
+        try TOTPGenerator.parse(otpauthURI: uri)
+    }
+}
+
+@Test func rejectsZeroOrNegativeDigits() {
+    for digits in ["0", "-1"] {
+        let uri = "otpauth://totp/Example:alice?secret=GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ&digits=\(digits)"
+        #expect(throws: TOTPError.self) {
+            try TOTPGenerator.parse(otpauthURI: uri)
+        }
+    }
+}
+
+@Test func rejectsZeroOrNegativePeriod() {
+    for period in ["0", "-30"] {
+        let uri = "otpauth://totp/Example:alice?secret=GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ&period=\(period)"
+        #expect(throws: TOTPError.self) {
+            try TOTPGenerator.parse(otpauthURI: uri)
+        }
+    }
+}
+
+@Test func rejectsNonFinitePeriod() {
+    // Foundation's TimeInterval(String) initializer parses the literal strings
+    // "inf"/"nan" successfully (to non-finite Doubles), so these would otherwise
+    // slip past a naive "TimeInterval(...) ?? 30" fallback undetected.
+    for period in ["inf", "-inf", "nan"] {
+        let uri = "otpauth://totp/Example:alice?secret=GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ&period=\(period)"
+        #expect(throws: TOTPError.self) {
+            try TOTPGenerator.parse(otpauthURI: uri)
+        }
+    }
+}
