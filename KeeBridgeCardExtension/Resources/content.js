@@ -281,7 +281,21 @@
         const placeholder = (element.getAttribute("placeholder") || "").toLowerCase();
         if (element.maxLength === 4) return `${month}${year.slice(-2)}`;
         if (element.maxLength === 6 && !placeholder.includes("/")) return `${month}${year}`;
-        if (placeholder.includes("yyyy")) return `${month}/${year}`;
+        const yyyyIndex = placeholder.indexOf("yyyy");
+        if (yyyyIndex !== -1) {
+          // Match the placeholder's own token order and separator instead of
+          // assuming "MM/YYYY": a "yyyy" substring alone doesn't tell us
+          // whether the placeholder is month-first ("MM/YYYY") or year-first
+          // ("YYYY-MM", "YYYY/MM"), nor which separator it uses. Getting
+          // either wrong silently writes objectively incorrect data into a
+          // field that validates against its own stated format (e.g. "04/2027"
+          // into a "YYYY-MM" field is the wrong order AND the wrong separator,
+          // not just a different style).
+          const mmIndex = placeholder.indexOf("mm");
+          const placeholderYearFirst = mmIndex === -1 || yyyyIndex < mmIndex;
+          const separator = placeholder.includes("-") ? "-" : "/";
+          return placeholderYearFirst ? `${year}${separator}${month}` : `${month}${separator}${year}`;
+        }
         return `${month}/${year.slice(-2)}`;
       }
     }
