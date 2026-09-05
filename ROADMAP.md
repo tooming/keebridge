@@ -528,6 +528,65 @@
       and ran 10 concrete cases (including every previously-correct one, regression-checked)
       — all pass. Still needs a human eyeball in real Safari, same limit every `content.js`
       change in this ROADMAP carries.
+- [ ] Read-only vault opens materialize every binary attachment's decrypted bytes, even
+      though nothing in this app ever reads one — a real, confirmed memory-footprint gap,
+      groomed here rather than implemented this cycle because the actual fix is an
+      architectural change too large for one focused PR. Found by cross-checking
+      `VaultService.openContent`'s call to `KDBXReader.parse(_:unlockData:kdfLimits:)`
+      against the pinned KDBXKit dependency's own source (cloned read-only at
+      `/home/user/shadone/kdbxkit`, pinned revision `e9b8839f1226b82665e1e4b7f12f13635d189deb`
+      — see `KeeBridgeCore/Package.swift`) and its `CHANGELOG.md`/doc comments:
+      `KDBXReader.parse` is KDBXKit's **eager** API — its own doc comment says it "produces a
+      `KDBXContent` with every binary's bytes resident on
+      `innerHeader.binaryContent[i].data`" — and every KeeBridgeCore call site
+      (`listEntries`, `revealField`, `currentTOTPCode`, `passkeyMetadata`,
+      `paymentCardMetadata`, and the write paths) goes through this one eager parse via
+      `openContent`, regardless of whether the caller ever touches attachment bytes. This
+      app never does: `VaultLoginEntry`/`EntryDraft`/`VaultPasskeyMetadata`/
+      `VaultPaymentCard` only ever carry title/username/URL/password/notes/custom-string
+      field values, never a binary attachment. For a vault carrying real KeePass-style
+      attachments (scanned IDs, recovery PDFs, backup-code images — legitimate, common
+      KeePassXC/Proton-Pass-migration content, not a contrived case), every single
+      `openVault` call — on every autofill request, from the app, `KeeBridgeProvider`, AND
+      `KeeBridgeCardExtension` — decrypts and holds ALL of it in memory, proportional to
+      total attachment size across the whole vault, not to what's actually needed. KDBXKit
+      added `KDBXReader.openMetadataOnly`/`openMetadataStreaming` specifically for this:
+      their own doc comments name "the iOS AutoFill credential-provider extension,
+      jetsam-limited to ~220 MB" as the motivating case, which doesn't map onto macOS's more
+      permissive extension memory ceiling directly, but the underlying waste (holding
+      megabytes of attachment bytes an autofill request will never read) is the same
+      substance-independent-of-platform concern, and `KeeBridgeProvider`'s own
+      `contentCacheTTL` design already treats "how much stays resident in this extension's
+      memory" as something worth engineering around.
+      **Why not a same-cycle fix**: `openMetadataOnly` returns a different type
+      (`LazyKDBXContent`, not `KDBXContent`) — confirmed by reading both structs directly;
+      `LazyKDBXContent.database` is the same `KDBX` type, so `VaultService`'s read-only
+      functions could plausibly become generic over "anything with a `.database: KDBX`" with
+      a moderate refactor, but `KDBXWriter.write(_:unlockData:)` (confirmed by reading its
+      signature) accepts only `KDBXContent`, so every WRITE path
+      (`createEntry`/`updateEntry`/`deleteEntry`/`mergeExtensionOriginatedPasskeys`) must
+      keep using the eager parse — switching those would silently drop every attachment on
+      save, a real data-loss risk, not an acceptable trade. `openMetadataOnly` also throws
+      `unsupportedFormatVersion` for KDBX 3.x sources (README states this app supports
+      3.1/4.0/4.1), so any adoption needs an eager-parse fallback for 3.x vaults too. That's
+      a genuine multi-file, type-surface-changing refactor across `VaultService`,
+      `VaultController`'s session-cached `KDBXContent`, `CredentialProviderViewController`'s
+      `cachedContent`, `SafariWebExtensionHandler`'s cache, and `VaultProbe`'s read
+      subcommands — well past this ROADMAP's own "<~400 changed lines, one focused PR"
+      guideline for a single item, and risky to rush without deliberately designing the
+      read/write type split first.
+      **Unblocks with**: no external blocker — this is buildable, just needs its own
+      properly-scoped implementation item (or items) rather than folding into this spike.
+      Suggested split: (1) a narrow VaultService-internal refactor introducing a shared
+      read-only surface both `KDBXContent` and `LazyKDBXContent` can satisfy (protocol or a
+      thin wrapper enum), with `openContent`-for-reads switched to `openMetadataOnly` (with
+      an eager-parse fallback on `unsupportedFormatVersion`/3.x) while every write call site
+      keeps the eager path unchanged; (2) thread the lighter path through
+      `VaultController`/`CredentialProviderViewController`/`SafariWebExtensionHandler`'s
+      session caches as a follow-up once (1) is proven correct against
+      `VaultWritingTests.swift`'s existing round-trip coverage (attachments would need their
+      own new test fixture — none of today's tests exercise a vault with a binary
+      attachment at all, on either the eager or lazy path).
 
 ## Needs maintainer/human action (not code)
 
