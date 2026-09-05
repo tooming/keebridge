@@ -515,6 +515,19 @@
       today. Still needs a human eyeball: actually running `xcodegen generate` to confirm it
       now reproduces `Info.plist` instead of regressing it — this executor has no
       `xcodegen` binary.
+- [x] ~~Card expiration autofill assumed "MM/YYYY" for any placeholder mentioning "yyyy"~~ —
+      done, see `docs/done/2026-09-05-card-expiration-placeholder-format.md`. Found via a
+      second, independent adversarial review pass this run (fifth finding, after
+      #60/#61/#62/#63, all already merged). Real, reachable formatting bug in
+      `content.js`'s `formatValue()`: the combined `.expiration` field's `"yyyy"` branch only
+      checked substring presence, ignoring the placeholder's actual token order/separator —
+      a `"YYYY-MM"` field got `"04/2027"` (wrong order AND separator), a `"MM-YYYY"` field
+      got the wrong separator. Fixed to derive both from the placeholder itself.
+      Went beyond the usual "verified by reading" for `content.js` (no JS lint/test in CI):
+      extracted `formatValue` into a standalone Node.js test harness with minimal DOM stubs
+      and ran 10 concrete cases (including every previously-correct one, regression-checked)
+      — all pass. Still needs a human eyeball in real Safari, same limit every `content.js`
+      change in this ROADMAP carries.
 
 ## Needs maintainer/human action (not code)
 
