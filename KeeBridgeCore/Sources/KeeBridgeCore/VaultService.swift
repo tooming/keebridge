@@ -471,9 +471,14 @@ public struct VaultService: Sendable {
     /// it was saved — a real data-loss bug, not a hypothetical, and
     /// completely untested until this fix (`VaultProbe`'s `update`
     /// reveal-then-merge only ever considered the five standard fields
-    /// too, so it didn't protect against this either). Throws
-    /// `.entryNotFound` if no entry with that UUID exists anywhere in the
-    /// tree (searched recursively, same as `listEntries`/`revealField`).
+    /// too, so it didn't protect against this either). Also pushes a
+    /// snapshot of the entry's pre-edit state onto `entry.history`
+    /// (trimmed against `Meta.historyMaxItems` when set) before applying the
+    /// new values — matching KeePassXC's own versioning behavior, so an
+    /// edit made through KeeBridge stays undoable via KeePassXC's "View
+    /// History" the same way an edit made in KeePassXC itself already is.
+    /// Throws `.entryNotFound` if no entry with that UUID exists anywhere in
+    /// the tree (searched recursively, same as `listEntries`/`revealField`).
     public func updateEntry(uuid: String, applying draft: EntryDraft, at url: URL, rawKeyData: Data) throws {
         try updateEntry(uuid: uuid, applying: draft, at: url, unlock: UnlockData(rawKeyData: rawKeyData))
     }
@@ -488,7 +493,28 @@ public struct VaultService: Sendable {
 
     private func updateEntry(uuid: String, applying draft: EntryDraft, at url: URL, unlock: UnlockData) throws {
         var content = try openContent(at: url, unlock: unlock)
+        let historyMaxItems = content.database.meta.historyMaxItems
         let found = Self.mutateEntry(in: &content.database.root.group, uuid: uuid) { entry in
+            // Snapshot the pre-edit state into entry.history before applying
+            // any change — KDBXKit's own doc comment on `KDBX.Entry.history`
+            // spells out the contract this method didn't follow until now:
+            // "Every entry set or equivalent edit prepends a snapshot of the
+            // prior state here." Without this, every edit made through
+            // KeeBridge (this app's Edit form or VaultProbe's `update`) was
+            // NOT undoable via KeePassXC's own "View History" the way an
+            // edit made in KeePassXC itself already is — silently discarding
+            // the KeePass ecosystem's standard versioning safety net, not a
+            // hypothetical gap: a fat-fingered edit or an accidentally wrong
+            // regenerated password had no recovery path except a whole-file
+            // `.bak` one generation back. The snapshot's own `history` is
+            // cleared to `[]` — a historical entry never carries its own
+            // nested history (KDBXKit's own validator flags exactly this:
+            // "History has element has own History").
+            var snapshot = entry
+            snapshot.history = []
+            entry.history.append(snapshot)
+            Self.trimHistory(&entry, maxItems: historyMaxItems)
+
             // Preserve every field this method doesn't know about (including
             // KPEX_PASSKEY_* and custom fields) — only the standard
             // fields get the full-replace treatment. See this method's
@@ -505,6 +531,22 @@ public struct VaultService: Sendable {
         }
         guard found else { throw VaultWriteError.entryNotFound(uuid) }
         try write(content, unlock: unlock, to: url)
+    }
+
+    /// Drops the oldest history snapshots once `entry.history` (oldest
+    /// first, per KDBXKit's own doc comment) exceeds `maxItems`. No-op when
+    /// `maxItems` is `.unlimited` or `nil` (not set in this vault's
+    /// `Meta`) — history is left to grow unbounded in that case, same as it
+    /// would in a freshly-created KeeBridge vault with no explicit policy;
+    /// KeePassXC applies its own trim on its next save regardless, so this
+    /// is a "don't lose recoverability between KeeBridge saves" floor, not a
+    /// promise this is the vault's final history size forever. Deliberately
+    /// doesn't also implement `Meta.historyMaxSize` (byte-size trimming) —
+    /// a separate, more involved accounting problem left for a follow-up if
+    /// it turns out to matter in practice.
+    private static func trimHistory(_ entry: inout KDBX.Entry, maxItems: KDBX.ValueOrUnlimited<UInt32>?) {
+        guard case .value(let max) = maxItems, entry.history.count > Int(max) else { return }
+        entry.history.removeFirst(entry.history.count - Int(max))
     }
 
     /// Sets (or overwrites) an existing entry's passkey fields in place —
