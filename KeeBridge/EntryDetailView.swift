@@ -47,7 +47,7 @@ struct EntryDetailView: View {
                             }
                             .buttonStyle(.borderless)
                             Button {
-                                copyToPasteboard(revealedPassword)
+                                copyToPasteboard(revealedPassword, autoClearAfter: Self.passwordClipboardAutoClearDelay)
                             } label: {
                                 Image(systemName: "doc.on.doc")
                             }
@@ -175,8 +175,36 @@ struct EntryDetailView: View {
         revealedNotes = draft.notes
     }
 
-    private func copyToPasteboard(_ string: String) {
-        NSPasteboard.general.clearContents()
-        NSPasteboard.general.setString(string, forType: .string)
+    // How long a copied password stays on the system pasteboard before this
+    // view clears it again. Only the password's own copy button passes this
+    // — the username/URL/passkey-metadata copy buttons (fieldRow's
+    // `copyable: true`) are non-secret and deliberately don't auto-clear,
+    // same distinction KeeBridge already draws everywhere else between
+    // secret and non-secret fields. 30s matches the common default other
+    // password managers (1Password, Bitwarden) use for this.
+    private static let passwordClipboardAutoClearDelay: TimeInterval = 30
+
+    /// Copies `string` to the system pasteboard — any other app on the Mac
+    /// can read it until it's overwritten or cleared, so a copied PASSWORD
+    /// sitting there indefinitely (the previous behavior: no auto-clear at
+    /// all) is a real, silent exposure window, not a hypothetical one. Pass
+    /// `autoClearAfter` for secret material to schedule clearing it again
+    /// after that delay — but only if the pasteboard still holds exactly
+    /// what THIS call put there: `NSPasteboard.changeCount` increments on
+    /// every write from any app, so capturing it right after our own write
+    /// and comparing it again at clear time (rather than unconditionally
+    /// calling `clearContents()`) is the standard, AppKit-documented way to
+    /// avoid wiping out something the user copied from elsewhere in the
+    /// meantime.
+    private func copyToPasteboard(_ string: String, autoClearAfter clearDelay: TimeInterval? = nil) {
+        let pasteboard = NSPasteboard.general
+        pasteboard.clearContents()
+        pasteboard.setString(string, forType: .string)
+        guard let clearDelay else { return }
+        let changeCount = pasteboard.changeCount
+        DispatchQueue.main.asyncAfter(deadline: .now() + clearDelay) {
+            guard NSPasteboard.general.changeCount == changeCount else { return }
+            NSPasteboard.general.clearContents()
+        }
     }
 }
