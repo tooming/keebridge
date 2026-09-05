@@ -75,6 +75,8 @@ targets:
             ASCredentialProviderExtensionCapabilities:
               ProvidesPasswords: true
               ProvidesOneTimeCodes: true
+              ProvidesPasskeys: true
+              SupportsConditionalPasskeyRegistration: true
     dependencies:
       - package: KeeBridgeCore
 

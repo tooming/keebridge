@@ -495,6 +495,26 @@
       mechanism for this. Non-secret copy buttons (username/URL/passkey metadata) are
       unaffected. Still needs a human eyeball to confirm the actual clipboard behavior on
       real hardware — this executor has no GUI.
+- [x] ~~`project.yml` was missing two passkey capability flags a real `xcodegen generate`
+      would silently regress~~ — done, see
+      `docs/done/2026-09-05-project-yml-passkey-capabilities-drift.md`. Found via a fresh,
+      adversarial read of `project.yml` cross-checked against the physical
+      `KeeBridgeProvider/Info.plist` (fourth finding this run, after #60/#61/#62 — the first
+      to look at build config rather than application logic). Real drift, confirmed via git
+      history: `project.yml`'s `ASCredentialProviderExtensionCapabilities` block only
+      declared `ProvidesPasswords`/`ProvidesOneTimeCodes`, while the physical `Info.plist`
+      (what Xcode's build actually reads today, so no CURRENT build is affected) also has
+      `ProvidesPasskeys`/`SupportsConditionalPasskeyRegistration` — added directly to the
+      physical file by two earlier passkey-registration PRs that never updated `project.yml`
+      to match. Since XcodeGen regenerates `info.path` from `info.properties` on every
+      `xcodegen generate` run (`README.md`'s own documented first setup step), this was a
+      live regression trap: the next regenerate would silently overwrite `Info.plist` with
+      the two-flag version, disabling passkey assertion routing and both registration flows
+      with no error anywhere to catch it. Fixed by adding the two missing flags to
+      `project.yml` so it matches the physical file exactly. Config-only, no behavior change
+      today. Still needs a human eyeball: actually running `xcodegen generate` to confirm it
+      now reproduces `Info.plist` instead of regressing it — this executor has no
+      `xcodegen` binary.
 
 ## Needs maintainer/human action (not code)
 
