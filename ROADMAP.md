@@ -453,6 +453,22 @@
       `VaultBrowserView` show a read-only "Payment Card" section/icon (which field types
       are present, never values); `VaultProbe` gained a `card` subcommand and a `list`
       marker, same metadata-only scope as the existing `passkey` subcommand.
+- [x] ~~Vault mirror files (`VaultController.mirrorVaultToExtension`/
+      `mirrorVaultToExtensions`) were replaced non-atomically, racing both extensions'
+      independent reads~~ — done, see `docs/done/2026-09-05-vault-mirror-atomic-replace.md`.
+      Found via a fresh, adversarial re-read of `VaultController.swift`, cross-checked
+      against `VaultService.write`'s own existing atomic-write precedent for the source
+      vault. Real, reachable race, not hypothetical: the old `removeItem`+`copyItem`
+      sequence left a window where the mirror path was either momentarily missing or only
+      partially written, and both `CredentialProviderViewController` and
+      `SafariWebExtensionHandler` read that exact path independently, any time a mirror
+      refresh (`refreshIfStale()`, fired on every app foreground) lands mid-flight — exactly
+      the normal "switch back to Safari" autofill workflow, not a rare edge case. Fixed with
+      a new `atomicallyReplaceMirror(at:withContentsOf:)` helper: copy to a temp file in the
+      same directory, then swap it into place via `FileManager.replaceItemAt`/`moveItem`
+      (both backed by an atomic same-volume `rename()`) instead of remove-then-copy — a
+      concurrent reader now always sees either the complete old file or the complete new
+      one, never a missing/partial one.
 
 ## Needs maintainer/human action (not code)
 
