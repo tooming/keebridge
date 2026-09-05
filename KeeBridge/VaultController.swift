@@ -443,10 +443,7 @@ final class VaultController: ObservableObject {
             }
         }
 
-        if fm.fileExists(atPath: mirrorURL.path) {
-            try fm.removeItem(at: mirrorURL)
-        }
-        try fm.copyItem(at: source, to: mirrorURL)
+        try atomicallyReplaceMirror(at: mirrorURL, withContentsOf: source)
         recordLastAppWrite(mirrorURL: mirrorURL, markerURL: markerURL)
     }
 
@@ -464,10 +461,44 @@ final class VaultController: ObservableObject {
             at: cardMirrorURL.deletingLastPathComponent(),
             withIntermediateDirectories: true
         )
-        if fm.fileExists(atPath: cardMirrorURL.path) {
-            try fm.removeItem(at: cardMirrorURL)
+        try atomicallyReplaceMirror(at: cardMirrorURL, withContentsOf: source)
+    }
+
+    /// Atomically replaces (or creates) the mirror file at `destinationURL`
+    /// with a fresh copy of `source`'s current contents. Two OTHER processes
+    /// (`CredentialProviderViewController`, `SafariWebExtensionHandler`) read
+    /// this exact path independently and asynchronously, at any time —
+    /// including mid-refresh, since `refreshIfStale()` fires on every
+    /// `NSApplication.didBecomeActiveNotification` (e.g. switching back from
+    /// Safari to KeeBridge and back again, which is exactly the normal
+    /// autofill workflow). The previous `removeItem` + `copyItem` sequence
+    /// left a real window where the mirror path was either momentarily
+    /// missing entirely or only partially written by `copyItem`'s underlying
+    /// `copyfile()` call — a reader landing in that window would see a
+    /// spurious "no vault mirror found" / "missingMirror" or a corrupt-KDBX
+    /// open failure, through no fault of its own.
+    ///
+    /// Fix: copy `source` to a temp file in the SAME directory as
+    /// `destinationURL` first, then swap it into place via a single atomic
+    /// filesystem operation (`replaceItemAt` when a mirror already exists —
+    /// backed by `rename()`, atomic on one volume; `moveItem` for the
+    /// first-ever mirror, same underlying guarantee) — a concurrent reader
+    /// always sees either the complete old file or the complete new one,
+    /// never a missing/partial one. This is the same atomicity discipline
+    /// `VaultService.write(_:unlock:to:)` already applies to the *source*
+    /// vault (via `AtomicFileWriter`); it just hadn't been extended to these
+    /// mirror copies until now.
+    nonisolated private static func atomicallyReplaceMirror(at destinationURL: URL, withContentsOf source: URL) throws {
+        let fm = FileManager.default
+        let tempURL = destinationURL.deletingLastPathComponent()
+            .appendingPathComponent(".\(destinationURL.lastPathComponent).tmp-\(UUID().uuidString)")
+        try fm.copyItem(at: source, to: tempURL)
+        defer { try? fm.removeItem(at: tempURL) }
+        if fm.fileExists(atPath: destinationURL.path) {
+            _ = try fm.replaceItemAt(destinationURL, withItemAt: tempURL)
+        } else {
+            try fm.moveItem(at: tempURL, to: destinationURL)
         }
-        try fm.copyItem(at: source, to: cardMirrorURL)
     }
 
     /// True when the mirror's current modification date doesn't match
