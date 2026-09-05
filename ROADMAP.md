@@ -38,9 +38,15 @@
       The app writes a separate read-only mirror straight from the source vault so this
       path cannot interfere with the provider mirror's passkey merge-back. Still needs
       real Safari/Touch ID verification because CI is headless.
-- [ ] Automatic proposal of storing the password after logging into a new site (#33) —
+- [x] ~~Automatic proposal of storing the password after logging into a new site (#33)~~ —
       investigated (STEP 6b refill, ROADMAP lane was otherwise empty this cycle), see
-      `docs/done/2026-09-02-save-password-proposal-feasibility-spike.md`.
+      `docs/done/2026-09-02-save-password-proposal-feasibility-spike.md`. Marked `[x]` here
+      (this run) to match GitHub: the maintainer closed #33 as completed on 2026-09-02, the
+      same day this investigation landed — the ROADMAP line had been left unchecked since
+      then, so every run's STEP 3 kept re-deriving "topmost unchecked item is blocked" from
+      scratch instead of the state already being reflected here. This is a doc-sync fix, not
+      a new finding about the feature itself, which is still exactly as blocked as described
+      below.
       **BLOCKED on Apple's platform, not on KeeBridge or this environment**: the API this
       needs, `ASCredentialProviderViewController.prepareInterface(for: ASSavePasswordRequest)`/
       `performWithoutUserInteractionIfPossible(savePasswordRequest:)`, is
@@ -590,17 +596,14 @@
 
 ## Needs maintainer/human action (not code)
 
-- [ ] Decommission Proton Pass — final migration step (#5) — password + TOTP autofill via
-      KeeBridge is confirmed working end-to-end; this is the last step of the original
-      migration. Disable Proton Pass's Safari Web Extension (Safari → Settings →
-      Extensions — Proton has no native `ASCredentialProviderViewController` extension, so
-      there's no System Settings AutoFill toggle to hunt for), re-scan `pluginkit -m -v`
-      to confirm no stale registration remains, and decide whether to keep or cancel the
-      Proton Pass account. This is an interactive, local-machine action — the headless
-      executor cannot open Safari Settings or run `pluginkit` against the maintainer's own
-      session. If this is ever the topmost remaining item with nothing else buildable,
-      surface it via an `[Action needed]` PR (STEP 6b) rather than fabricating code work
-      for it.
+- [x] ~~Decommission Proton Pass — final migration step (#5)~~ — done, by the maintainer's
+      own hand: #5 was closed (`state_reason: completed`) on 2026-09-03. Marked `[x]` here
+      (found via this run's GitHub-issue cross-check — every closed issue this ROADMAP
+      references was re-verified against its actual current state) to match; this section
+      had been left stale since the closure, still describing the interactive Safari
+      Settings/`pluginkit` steps as pending. Password + TOTP autofill via KeeBridge is
+      confirmed working end-to-end; this was the last step of the original Proton Pass
+      migration, and it's done.
 
 ## Done
 
