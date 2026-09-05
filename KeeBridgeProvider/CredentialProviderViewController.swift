@@ -817,7 +817,21 @@ final class CredentialProviderViewController: ASCredentialProviderViewController
     }
 
     private func completeSelection(entry: VaultLoginEntry, content: KDBXContent) {
-        guard let password = vaultService.revealField(in: content, entryUUID: entry.uuid, fieldKey: "Password") else { return }
+        // The manual list (showList) shows EVERY entry in the vault, not just
+        // ones with a Password field — a passkey-only entry (no traditional
+        // login at all) or any other entry someone picks from "Passwords…"
+        // can legitimately have none. Silently returning here (the previous
+        // behavior) never called respond*(), so the popover just sat there
+        // until the 30s watchdog eventually forced a generic .failed cancel
+        // — exactly the "something always responds, promptly" guarantee this
+        // file's header comment describes, which completePasswordCredential
+        // (the interactive-request counterpart to this manual-list path)
+        // already upholds for the identical "no Password field" case.
+        guard let password = vaultService.revealField(in: content, entryUUID: entry.uuid, fieldKey: "Password") else {
+            log.error("completeSelection: entry \(entry.uuid, privacy: .private) has no Password field — cancelling")
+            respondCancel(.credentialIdentityNotFound)
+            return
+        }
         respondComplete(with: ASPasswordCredential(user: entry.username, password: password))
     }
 

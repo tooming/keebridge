@@ -453,6 +453,19 @@
       `VaultBrowserView` show a read-only "Payment Card" section/icon (which field types
       are present, never values); `VaultProbe` gained a `card` subcommand and a `list`
       marker, same metadata-only scope as the existing `passkey` subcommand.
+- [x] ~~Manual credential picker (`CredentialProviderViewController.completeSelection`)
+      never responded at all for an entry with no `Password` field~~ — done, see
+      `docs/done/2026-09-05-manual-picker-missing-password-response.md`. Found via a fresh,
+      adversarial re-read of `CredentialProviderViewController.swift` (previously read in
+      full by earlier cycles, but not with a "does every exit path actually respond" lens).
+      Real, reachable gap, not hypothetical: the manual "Passwords…" list shows every vault
+      entry, including passkey-only entries with no traditional login at all, so picking one
+      from that list silently returned with no `respond*()` call — the popover just sat
+      there until this file's own 30s watchdog eventually forced a generic `.failed` cancel,
+      contradicting the "always responds, promptly" guarantee this file's own header comment
+      describes. `completePasswordCredential` (the interactive-request counterpart handling
+      the identical condition) already called `respondCancel(.credentialIdentityNotFound)`
+      correctly; `completeSelection` just never got the same treatment. Fixed to match.
 - [x] ~~Vault mirror files (`VaultController.mirrorVaultToExtension`/
       `mirrorVaultToExtensions`) were replaced non-atomically, racing both extensions'
       independent reads~~ — done, see `docs/done/2026-09-05-vault-mirror-atomic-replace.md`.
