@@ -7,6 +7,7 @@
 // temp file and cleans up after itself.
 
 import Foundation
+import KDBXKit
 import Testing
 @testable import KeeBridgeCore
 
@@ -185,6 +186,98 @@ private func tempVaultURL() -> URL {
     let metadata = try service.passkeyMetadata(at: url, masterPassword: testPassword, entryUUID: uuid)
     #expect(metadata?.relyingParty == "example.com")
     #expect(metadata?.credentialID == Data([0x01, 0x02]))
+}
+
+@Test func updateEntryPreservesHistoryOfPriorStates() throws {
+    // Regression test: updateEntry used to overwrite an entry's fields with
+    // no history snapshot at all — undoable via KeePassXC's own "View
+    // History" for an edit made there, but NOT for one made through
+    // KeeBridge, silently breaking KDBXKit's own documented contract for
+    // KDBX.Entry.history ("every entry set or equivalent edit prepends a
+    // snapshot of the prior state here").
+    let service = VaultService()
+    let url = tempVaultURL()
+    defer { try? FileManager.default.removeItem(at: url) }
+    try service.createVault(at: url, masterPassword: testPassword, databaseName: "Test Vault")
+
+    let uuid = try service.createEntry(
+        .init(title: "First", username: "alice", password: "pass1"), at: url, masterPassword: testPassword
+    )
+    try service.updateEntry(
+        uuid: uuid, applying: .init(title: "Second", username: "alice", password: "pass2"),
+        at: url, masterPassword: testPassword
+    )
+    try service.updateEntry(
+        uuid: uuid, applying: .init(title: "Third", username: "alice", password: "pass3"),
+        at: url, masterPassword: testPassword
+    )
+
+    let content = try service.openVault(at: url, masterPassword: testPassword)
+    let entry = try #require(content.database.root.group.entries.first { "\($0.uuid)" == uuid })
+
+    func value(_ entry: KDBX.Entry, _ key: String) -> String? {
+        entry.strings.first(where: { $0.key == key })?.value.revealedString
+    }
+
+    #expect(value(entry, "Title") == "Third")
+    #expect(entry.history.count == 2)
+    // Oldest first: history[0] is the state right after createEntry (before
+    // the first updateEntry), history[1] is the state after the first
+    // updateEntry (before the second).
+    #expect(value(entry.history[0], "Title") == "First")
+    #expect(value(entry.history[0], "Password") == "pass1")
+    #expect(value(entry.history[1], "Title") == "Second")
+    #expect(value(entry.history[1], "Password") == "pass2")
+    // A historical snapshot never carries its own nested history.
+    #expect(entry.history[0].history.isEmpty)
+    #expect(entry.history[1].history.isEmpty)
+
+    // KDBXKit's own validator shouldn't flag anything about the history
+    // this produced (e.g. "History has element has own History", "History
+    // has element with a different UUID").
+    let historyFailures = entry.validate().filter { $0.message.localizedCaseInsensitiveContains("history") }
+    #expect(historyFailures.isEmpty)
+}
+
+@Test func updateEntryTrimsHistoryToMetaHistoryMaxItems() throws {
+    let service = VaultService()
+    let url = tempVaultURL()
+    defer { try? FileManager.default.removeItem(at: url) }
+    try service.createVault(at: url, masterPassword: testPassword, databaseName: "Test Vault")
+    let uuid = try service.createEntry(.init(title: "v1"), at: url, masterPassword: testPassword)
+
+    // createVault's fresh vault has no explicit historyMaxItems (KDBXKit's
+    // makeEmpty doesn't set one) — set a tight limit directly via KDBXKit
+    // (no public VaultService API exposes a Meta setter) to exercise
+    // trimming deterministically, round-tripping through the same low-level
+    // write VaultService.write uses internally — mirroring PasskeyTests.swift's
+    // pattern for constructing state VaultService's own API doesn't expose a
+    // setter for.
+    var content = try service.openVault(at: url, masterPassword: testPassword)
+    content.database.meta.historyMaxItems = .value(2)
+    let unlock = UnlockData(masterPassword: testPassword)
+    let stream = OutputStream(toMemory: ())
+    stream.open()
+    try KDBXWriter(to: stream).write(content, unlockData: unlock)
+    let data = try #require(stream.property(forKey: .dataWrittenToMemoryStreamKey) as? Data)
+    try data.write(to: url)
+
+    for i in 2...4 {
+        try service.updateEntry(uuid: uuid, applying: .init(title: "v\(i)"), at: url, masterPassword: testPassword)
+    }
+
+    let final = try service.openVault(at: url, masterPassword: testPassword)
+    let entry = try #require(final.database.root.group.entries.first { "\($0.uuid)" == uuid })
+    func value(_ entry: KDBX.Entry, _ key: String) -> String? {
+        entry.strings.first(where: { $0.key == key })?.value.revealedString
+    }
+    #expect(value(entry, "Title") == "v4")
+    // 3 updateEntry calls (v2, v3, v4) would produce 3 history snapshots
+    // (v1, v2, v3) uncapped; historyMaxItems: 2 must trim to the 2 MOST
+    // RECENT ones (oldest first: v2, then v3), dropping v1.
+    #expect(entry.history.count == 2)
+    #expect(value(entry.history[0], "Title") == "v2")
+    #expect(value(entry.history[1], "Title") == "v3")
 }
 
 @Test func entryDraftRoundTripsOTPURI() throws {

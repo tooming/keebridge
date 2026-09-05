@@ -138,7 +138,16 @@ struct EntryDetailView: View {
             }
             Button("Cancel", role: .cancel) {}
         } message: {
-            Text("This can't be undone from within KeeBridge — KeePassXC's own backup/history is the recovery path.")
+            // Deliberately doesn't say "KeePassXC's own backup/history is the
+            // recovery path" (the previous wording) — that overstated the
+            // actual guarantee. deleteEntry does a hard removal with no
+            // recycle bin (see its own doc comment) and never populates the
+            // entry's history before deleting it, so there's no KeePass
+            // version-history trail to recover from for a deletion made
+            // through KeeBridge specifically. The vault's own `.bak` sibling
+            // (VaultService.write's AtomicFileWriter backup, one save
+            // generation back) is the real recovery path.
+            Text("This can't be undone from within KeeBridge, and there's no recycle bin here yet — the vault's own \".bak\" file (written next to it on every save) is the only recovery path, one save generation back.")
         }
     }
 

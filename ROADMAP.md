@@ -593,6 +593,26 @@
       `VaultWritingTests.swift`'s existing round-trip coverage (attachments would need their
       own new test fixture — none of today's tests exercise a vault with a binary
       attachment at all, on either the eager or lazy path).
+- [x] ~~`updateEntry` never populated `entry.history`, silently breaking KeePass version
+      history~~ — done, see `docs/done/2026-09-05-update-entry-history-preservation.md`.
+      Found via a continued adversarial review this run (seventh finding, after #60–#66),
+      reading the pinned KDBXKit dependency's own source directly. Real, confirmed gap, not
+      speculation: KDBXKit's own doc comment on `KDBX.Entry.history` states "every entry set
+      or equivalent edit prepends a snapshot of the prior state here," matching KeePassXC's
+      actual behavior (its "View History" feature) — `updateEntry` mutated fields in place
+      and never touched `history` at all, so every edit made through KeeBridge (the app's
+      Edit form or `VaultProbe`'s `update`) had no recovery path beyond the whole-file `.bak`
+      one save-generation back, unlike an equivalent KeePassXC edit. Fixed: `updateEntry` now
+      snapshots the pre-edit state into `entry.history` (nested history cleared, matching
+      KDBXKit's own validator expectation) before applying changes, trimmed against
+      `Meta.historyMaxItems` when set. Also corrected `EntryDetailView`'s delete-confirmation
+      copy, which misattributed "KeePassXC's own backup/history" as the recovery path for a
+      deletion — `deleteEntry` has no recycle bin and never populates history before
+      removing an entry, so the real recovery path (the vault's own `.bak` sibling) is what
+      the text says now. Two new `@Test` cases in `VaultWritingTests.swift`, actually run via
+      `swift test`/CI (unlike this run's app-layer/JS fixes) — history-snapshot ordering/
+      field-fidelity/no-nested-history/no-validator-warnings, and `historyMaxItems`
+      trimming.
 
 ## Needs maintainer/human action (not code)
 
