@@ -482,6 +482,19 @@
       (both backed by an atomic same-volume `rename()`) instead of remove-then-copy — a
       concurrent reader now always sees either the complete old file or the complete new
       one, never a missing/partial one.
+- [x] ~~Copied passwords stayed on the system pasteboard indefinitely, with no auto-clear~~
+      — done, see `docs/done/2026-09-05-clipboard-auto-clear.md`. Found via a fresh,
+      adversarial re-read of `EntryDetailView.swift` (third finding this run, after #60/#61).
+      Real, not hypothetical, for a credential manager: the pasteboard is readable by any
+      other app until overwritten or cleared, and every comparable password manager
+      (1Password, Bitwarden, KeePassXC) auto-clears it after a short delay for exactly this
+      reason — KeeBridge never had. Fixed: `copyToPasteboard` gained an optional
+      `autoClearAfter:` delay, applied only to the password's own copy button (30s) —
+      captures `NSPasteboard.changeCount` right after writing and only clears later if
+      nothing else has touched the pasteboard since, per `NSPasteboard`'s own documented
+      mechanism for this. Non-secret copy buttons (username/URL/passkey metadata) are
+      unaffected. Still needs a human eyeball to confirm the actual clipboard behavior on
+      real hardware — this executor has no GUI.
 
 ## Needs maintainer/human action (not code)
 
