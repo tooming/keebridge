@@ -16,7 +16,6 @@ import Foundation
 import AppKit
 import AuthenticationServices
 import KeeBridgeCore
-import KDBXKit
 import os
 
 @MainActor
@@ -58,13 +57,21 @@ final class VaultController: ObservableObject {
     // re-opened the file from disk AND re-ran the full Argon2id KDF, same
     // cost as unlock() itself; that's what KeePassXC does NOT do (it derives
     // the key once and holds the decrypted database in memory), and why it
-    // has no equivalent lag. `KDBXContent`'s protected fields still use
+    // has no equivalent lag. The vault content's protected fields still use
     // `.lazyInnerCipher` internally (see KDBXKit's ProtectedString.swift) —
     // caching this does not mean plaintext secrets sit in memory, only the
-    // same post-KDF-pre-inner-cipher state KeePassXC itself holds. Refreshed
-    // on unlock, on refreshFromCache() (manual + throttled auto), and after
-    // every successful write.
-    private var cachedContent: KDBXContent?
+    // same post-KDF-pre-inner-cipher state KeePassXC itself holds; true of
+    // both `KDBXKit` open paths this can hold (see `VaultReadableContent`),
+    // since only binary-attachment handling differs between them, not
+    // protected-string handling. Refreshed on unlock, on refreshFromCache()
+    // (manual + throttled auto), and after every successful write. `any
+    // VaultReadableContent`, not the concrete `KDBXContent`, since every
+    // read here goes through `openReadOnlyVault` now — this app never
+    // writes through this cached value (see `createEntry`/`updateEntry`/
+    // `deleteEntry` below: fresh open-mutate-write against the source
+    // vault, never this cache), only ever re-opens read-only after a write
+    // that already landed to refresh it.
+    private var cachedContent: (any VaultReadableContent)?
 
     // Just remembering this app's own last pick between launches — no
     // cross-process sharing needed, so plain UserDefaults.standard.
@@ -123,7 +130,7 @@ final class VaultController: ObservableObject {
         log.notice("unlock: starting Argon2id verify on background task")
         Task.detached(priority: .userInitiated) { [vaultService, keychain, log] in
             do {
-                let content = try vaultService.openVault(at: vaultURL, masterPassword: password)
+                let content = try vaultService.openReadOnlyVault(at: vaultURL, masterPassword: password)
                 let entries = vaultService.listEntries(in: content)
                 let preHash = vaultService.preHashKeyData(forPassword: password)
                 try keychain.store(preHash)
@@ -192,7 +199,7 @@ final class VaultController: ObservableObject {
                 // re-registering stale data. Re-caches cachedContent too,
                 // since this is the mechanism (manual button + throttled
                 // auto-refresh) that's supposed to pick up external edits.
-                let content = try vaultService.openVault(at: vaultURL, rawKeyData: preHash)
+                let content = try vaultService.openReadOnlyVault(at: vaultURL, rawKeyData: preHash)
                 let entries = vaultService.listEntries(in: content)
                 try Self.mirrorVaultToExtensions(from: vaultURL, rawKeyData: preHash)
 
@@ -281,10 +288,13 @@ final class VaultController: ObservableObject {
                 // open-mutate-write, not against a possibly-stale cache —
                 // that's what keeps the window for clobbering a concurrent
                 // KeePassXC edit small. Only the POST-write re-list below
-                // uses openVault (vs. plain listEntries) so it can refresh
-                // cachedContent too, for free — same Argon2 cost either way.
+                // uses openReadOnlyVault (vs. plain listEntries) so it can
+                // refresh cachedContent too, for free — same Argon2 cost
+                // either way (both `openVault`/`openReadOnlyVault` derive
+                // the key the same way; only binary-attachment handling
+                // differs between them).
                 _ = try vaultService.createEntry(draft, at: vaultURL, rawKeyData: preHash)
-                let content = try vaultService.openVault(at: vaultURL, rawKeyData: preHash)
+                let content = try vaultService.openReadOnlyVault(at: vaultURL, rawKeyData: preHash)
                 let entries = vaultService.listEntries(in: content)
                 try Self.mirrorVaultToExtensions(from: vaultURL, rawKeyData: preHash)
                 await MainActor.run { [weak self] in
@@ -310,7 +320,7 @@ final class VaultController: ObservableObject {
         Task.detached(priority: .userInitiated) { [vaultService] in
             do {
                 try vaultService.updateEntry(uuid: uuid, applying: draft, at: vaultURL, rawKeyData: preHash)
-                let content = try vaultService.openVault(at: vaultURL, rawKeyData: preHash)
+                let content = try vaultService.openReadOnlyVault(at: vaultURL, rawKeyData: preHash)
                 let entries = vaultService.listEntries(in: content)
                 try Self.mirrorVaultToExtensions(from: vaultURL, rawKeyData: preHash)
                 await MainActor.run { [weak self] in
@@ -336,7 +346,7 @@ final class VaultController: ObservableObject {
         Task.detached(priority: .userInitiated) { [vaultService] in
             do {
                 try vaultService.deleteEntry(uuid: uuid, at: vaultURL, rawKeyData: preHash)
-                let content = try vaultService.openVault(at: vaultURL, rawKeyData: preHash)
+                let content = try vaultService.openReadOnlyVault(at: vaultURL, rawKeyData: preHash)
                 let entries = vaultService.listEntries(in: content)
                 try Self.mirrorVaultToExtensions(from: vaultURL, rawKeyData: preHash)
                 await MainActor.run { [weak self] in
@@ -536,9 +546,11 @@ final class VaultController: ObservableObject {
 
     /// `content` is needed only to look up each passkey-bearing entry's
     /// relying party/credential ID/user handle (`VaultService.passkeyMetadata`
-    /// — pure in-memory, no Argon2/I/O) — every call site already has it in
-    /// scope from the same `openVault`/mirror step that produced `entries`.
-    private func populateIdentityStore(entries: [VaultLoginEntry], content: KDBXContent) {
+    /// — pure in-memory, no Argon2/I/O, and generic over `VaultReadableContent`
+    /// so this works the same regardless of which open path produced it) —
+    /// every call site already has it in scope from the same
+    /// `openReadOnlyVault`/mirror step that produced `entries`.
+    private func populateIdentityStore(entries: [VaultLoginEntry], content: any VaultReadableContent) {
         let store = ASCredentialIdentityStore.shared
         store.getState { [weak self] state in
             guard let self else { return }
