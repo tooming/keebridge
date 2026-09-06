@@ -103,6 +103,30 @@ public struct VaultService: Sendable {
         try openContent(at: url, unlock: UnlockData(rawKeyData: rawKeyData))
     }
 
+    /// Same as `openVault(at:masterPassword:)`, but prefers KDBXKit's
+    /// metadata-only read path (see `openReadOnlyContent`) — no binary
+    /// attachment bytes retained for the lifetime of the returned value.
+    /// Returns `any VaultReadableContent` rather than the concrete
+    /// `KDBXContent`, so a caller session-caching this result can only pass
+    /// it to the `VaultReadableContent`-generic `in content:` functions
+    /// (`listEntries`, `revealField`, `passkeyMetadata`,
+    /// `listPaymentCards`/`revealPaymentCardFields` in `PaymentCard.swift`,
+    /// etc.) — never to `KDBXWriter`, and never to a function that needs
+    /// `.header`/`.innerHeader` directly. A caller whose session also
+    /// writes through this same cached value must keep using `openVault`
+    /// instead; this is for read-only session callers only (first landed
+    /// for `KeeBridgeCardExtension.SafariWebExtensionHandler`, which never
+    /// writes to the vault at all).
+    public func openReadOnlyVault(at url: URL, masterPassword: String) throws -> any VaultReadableContent {
+        try openReadOnlyContent(at: url, unlock: UnlockData(masterPassword: masterPassword))
+    }
+
+    /// Same as `openReadOnlyVault(at:masterPassword:)`, unlocking from a
+    /// cached pre-hash instead.
+    public func openReadOnlyVault(at url: URL, rawKeyData: Data) throws -> any VaultReadableContent {
+        try openReadOnlyContent(at: url, unlock: UnlockData(rawKeyData: rawKeyData))
+    }
+
     /// Lightweight metadata for every login-type entry in an already-open
     /// vault (title, username, URL, and the *names* of any custom fields).
     /// Never returns a field *value* other than title/username/URL. Pure
