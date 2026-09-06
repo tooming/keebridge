@@ -572,27 +572,40 @@
       `SafariWebExtensionHandler`'s own session caches, where the real end-to-end memory
       win lives (every actual autofill request still goes through the unchanged eager
       `openVault`, today).
-- [ ] Thread the metadata-only read path from the item directly above into
-      `VaultController`/`CredentialProviderViewController`/`SafariWebExtensionHandler`'s
-      session-cached `openVault(at:...)` calls — part (2) of that item's original split,
-      deliberately deferred to its own cycle rather than rushed into the same PR. Now
-      buildable on top of `VaultReadableContent`/`VaultService.openReadOnlyContent`
-      (`docs/done/2026-09-06-vault-readable-content-refactor.md`): each of those three
-      session caches (`VaultController.cachedContent`, `CredentialProviderViewController
-      .cachedContent`, `SafariWebExtensionHandler.cachedContent`) is declared as the
-      concrete `KDBXContent`, so switching them to `any VaultReadableContent` (or a
-      `LazyKDBXContent`-with-eager-fallback split, matching `openReadOnlyContent`'s own
-      shape) needs care at each of their write-triggering call sites: every one of those
-      three files calls `openVault(at:...)` again after `createEntry`/`updateEntry`/
-      `deleteEntry`/`setPasskey`/a mirror refresh to re-cache the fresh content — those
+- [x] ~~Thread the metadata-only read path into `SafariWebExtensionHandler`'s session
+      cache~~ — **part (2a) of 3 done** (the first, smallest slice of the item this
+      grooms from), see `docs/done/2026-09-06-card-extension-read-only-vault.md`. Traced
+      `SafariWebExtensionHandler`'s full call graph first (not assumed): it is 100%
+      read-only — `listPaymentCards`/`revealPaymentCardFields` only, zero
+      `createEntry`/`updateEntry`/`deleteEntry`/`setPasskey` calls anywhere in the file —
+      the cleanest-boundary, lowest-risk of the three original consumers, so it went
+      first. Discovered while implementing: `VaultService.openReadOnlyContent` is
+      package-internal, invisible from `KeeBridgeCardExtension`'s separate module, so a
+      new **public** `VaultService.openReadOnlyVault(at:masterPassword/rawKeyData:)` pair
+      was needed first (thin wrappers around `openReadOnlyContent`, same shape as the
+      existing public `openVault(at:...)`) — this is the reusable entry point the
+      remaining two consumers below will call too. `SafariWebExtensionHandler
+      .cachedContent`/`unlockedContent`/`cache(content:...)` switched from `KDBXContent`
+      to `any VaultReadableContent`; both `openVault` call sites switched to
+      `openReadOnlyVault`; the now-unused `import KDBXKit` removed.
+- [ ] Thread the metadata-only read path (`VaultService.openReadOnlyVault`, landed above)
+      into `VaultController`'s and `CredentialProviderViewController`'s own
+      session-cached `openVault(at:...)` calls — parts (2b) and (2c) of the original
+      three-consumer split, the two NOT done in part (2a) because, unlike
+      `SafariWebExtensionHandler`, both files write to the vault
+      (`createEntry`/`updateEntry`/`deleteEntry`/`setPasskey`, plus `VaultController`'s
+      own mirror-refresh path) and re-cache fresh content after each write — those
       specific re-opens can switch to the read-only path since they're read-after-write,
-      not the write itself, but each file's exact call graph needs tracing (not assumed)
-      before changing its cache's stored type, since a mis-scoped change here risks the
-      same "silently drop attachments" failure mode the original grooming pass flagged for
-      the write paths. Likely still fits this ROADMAP's own <~400-line-per-PR guideline
-      once scoped per-file rather than all three at once — worth grooming into up to three
-      separate bullets (one per consumer) at pickup time rather than one bullet covering
-      all three, if it turns out too large for a single PR.
+      not the write itself, but each file's exact call graph needs tracing (not assumed,
+      same discipline part (2a) used) before changing its cache's stored type, since a
+      mis-scoped change here risks the same "silently drop attachments" failure mode the
+      original grooming pass flagged for the write paths themselves. Neither file has a
+      test target (`VaultController`/`CredentialProviderViewController` are
+      compiled-only, `xcodebuild`-verified same as every other app-layer change in this
+      ROADMAP), so extra care on the manual call-graph trace matters more here than it
+      did for part (2a), which KeeBridgeCoreTests could verify directly. Worth grooming
+      into two separate bullets (one per file) at pickup time rather than doing both in
+      one PR, given neither is as clean a boundary as `SafariWebExtensionHandler` was.
 - [x] ~~`updateEntry` never populated `entry.history`, silently breaking KeePass version
       history~~ — done, see `docs/done/2026-09-05-update-entry-history-preservation.md`.
       Found via a continued adversarial review this run (seventh finding, after #60–#66),

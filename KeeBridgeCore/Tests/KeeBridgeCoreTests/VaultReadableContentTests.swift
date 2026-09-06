@@ -69,6 +69,43 @@ private func makeVaultWithAttachment(at url: URL) throws -> (uuid: String, attac
     #expect(!(content is KDBXContent))
 }
 
+// MARK: - openReadOnlyVault — the public session-caching entry point
+//
+// A separate surface from `openReadOnlyContent` (package-internal, used by
+// the one-off `at url:` convenience methods above): `openReadOnlyVault` is
+// `public`, for callers in OTHER targets (KeeBridgeCardExtension,
+// KeeBridgeProvider, the app) that want to cache a read-only-opened vault
+// across a session the way they already cache `openVault`'s result, without
+// paying the eager attachment-materialization cost. First consumer:
+// `SafariWebExtensionHandler`, which never writes to the vault at all.
+
+@Test func openReadOnlyVaultReturnsLazyContentMatchingOpenReadOnlyContent() throws {
+    let service = VaultService()
+    let url = tempVaultURL()
+    defer { try? FileManager.default.removeItem(at: url) }
+    try service.createVault(at: url, masterPassword: testPassword, databaseName: "Test Vault")
+    let uuid = try service.createEntry(
+        .init(title: "Example", username: "alice", password: "s3cret"),
+        at: url, masterPassword: testPassword
+    )
+
+    let viaMasterPassword = try service.openReadOnlyVault(at: url, masterPassword: testPassword)
+    #expect(viaMasterPassword is LazyKDBXContent)
+
+    let preHash = service.preHashKeyData(forPassword: testPassword)
+    let viaRawKeyData = try service.openReadOnlyVault(at: url, rawKeyData: preHash)
+    #expect(viaRawKeyData is LazyKDBXContent)
+
+    // Both forms must agree with each other and with the `at url:`
+    // convenience that already routes through the same underlying path.
+    let entriesViaMasterPassword = service.listEntries(in: viaMasterPassword)
+    let entriesViaRawKeyData = service.listEntries(in: viaRawKeyData)
+    let entriesViaConvenience = try service.listEntries(at: url, masterPassword: testPassword)
+    #expect(entriesViaMasterPassword.map(\.uuid) == [uuid])
+    #expect(entriesViaRawKeyData.map(\.uuid) == [uuid])
+    #expect(entriesViaConvenience.map(\.uuid) == [uuid])
+}
+
 @Test func openReadOnlyContentCapturesAttachmentMetadataWithoutRetainingBytes() throws {
     let service = VaultService()
     let url = tempVaultURL()

@@ -4,7 +4,6 @@
 import Foundation
 import SafariServices
 import KeeBridgeCore
-import KDBXKit
 import os
 
 final class SafariWebExtensionHandler: NSObject, NSExtensionRequestHandling {
@@ -51,7 +50,7 @@ final class SafariWebExtensionHandler: NSObject, NSExtensionRequestHandling {
     // pattern Swift concurrency checking predates and `nonisolated(unsafe)`
     // exists specifically to declare, not a data race being papered over.
     private nonisolated(unsafe) static var cachedPreHash: Data?
-    private nonisolated(unsafe) static var cachedContent: KDBXContent?
+    private nonisolated(unsafe) static var cachedContent: (any VaultReadableContent)?
     private nonisolated(unsafe) static var cachedContentDate: Date?
     private nonisolated(unsafe) static var cachedMirrorDate: Date?
     private static let cacheTTL: TimeInterval = 5 * 60
@@ -130,7 +129,7 @@ final class SafariWebExtensionHandler: NSObject, NSExtensionRequestHandling {
         return FileManager.default.fileExists(atPath: url.path) ? url : nil
     }
 
-    private func unlockedContent(at url: URL, password: String?) throws -> KDBXContent? {
+    private func unlockedContent(at url: URL, password: String?) throws -> (any VaultReadableContent)? {
         let mirrorDate = try? url.resourceValues(forKeys: [.contentModificationDateKey]).contentModificationDate
         if let content = Self.cachedContent,
            let cachedAt = Self.cachedContentDate,
@@ -142,7 +141,7 @@ final class SafariWebExtensionHandler: NSObject, NSExtensionRequestHandling {
         let preHash: Data
         if let password, !password.isEmpty {
             do {
-                let content = try vaultService.openVault(at: url, masterPassword: password)
+                let content = try vaultService.openReadOnlyVault(at: url, masterPassword: password)
                 preHash = vaultService.preHashKeyData(forPassword: password)
                 try keychainOnMain { try keychain.store(
                     preHash, account: KeeBridgeConfig.cardExtensionKeychainAccount
@@ -171,7 +170,7 @@ final class SafariWebExtensionHandler: NSObject, NSExtensionRequestHandling {
         }
 
         do {
-            let content = try vaultService.openVault(at: url, rawKeyData: preHash)
+            let content = try vaultService.openReadOnlyVault(at: url, rawKeyData: preHash)
             cache(content: content, preHash: preHash, mirrorDate: mirrorDate)
             return content
         } catch {
@@ -183,7 +182,7 @@ final class SafariWebExtensionHandler: NSObject, NSExtensionRequestHandling {
         }
     }
 
-    private func cache(content: KDBXContent, preHash: Data, mirrorDate: Date?) {
+    private func cache(content: any VaultReadableContent, preHash: Data, mirrorDate: Date?) {
         Self.cachedContent = content
         Self.cachedContentDate = Date()
         Self.cachedMirrorDate = mirrorDate
