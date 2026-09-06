@@ -588,24 +588,39 @@
       .cachedContent`/`unlockedContent`/`cache(content:...)` switched from `KDBXContent`
       to `any VaultReadableContent`; both `openVault` call sites switched to
       `openReadOnlyVault`; the now-unused `import KDBXKit` removed.
-- [ ] Thread the metadata-only read path (`VaultService.openReadOnlyVault`, landed above)
-      into `VaultController`'s and `CredentialProviderViewController`'s own
-      session-cached `openVault(at:...)` calls — parts (2b) and (2c) of the original
-      three-consumer split, the two NOT done in part (2a) because, unlike
-      `SafariWebExtensionHandler`, both files write to the vault
-      (`createEntry`/`updateEntry`/`deleteEntry`/`setPasskey`, plus `VaultController`'s
-      own mirror-refresh path) and re-cache fresh content after each write — those
-      specific re-opens can switch to the read-only path since they're read-after-write,
-      not the write itself, but each file's exact call graph needs tracing (not assumed,
-      same discipline part (2a) used) before changing its cache's stored type, since a
-      mis-scoped change here risks the same "silently drop attachments" failure mode the
-      original grooming pass flagged for the write paths themselves. Neither file has a
-      test target (`VaultController`/`CredentialProviderViewController` are
-      compiled-only, `xcodebuild`-verified same as every other app-layer change in this
-      ROADMAP), so extra care on the manual call-graph trace matters more here than it
-      did for part (2a), which KeeBridgeCoreTests could verify directly. Worth grooming
-      into two separate bullets (one per file) at pickup time rather than doing both in
-      one PR, given neither is as clean a boundary as `SafariWebExtensionHandler` was.
+- [x] ~~Thread the metadata-only read path into `VaultController`'s session cache~~ —
+      **part (2b) of 3 done**, see `docs/done/2026-09-06-app-read-only-vault.md`. Traced
+      `VaultController`'s full call graph first (not assumed): all 5 of its
+      `vaultService.openVault(at:...)` call sites (`unlock`, `refresh`, and the
+      post-write re-list in each of `createEntry`/`updateEntry`/`deleteEntry`) are
+      themselves READ-ONLY re-opens — every actual WRITE goes through
+      `vaultService.createEntry`/`updateEntry`/`deleteEntry` directly (unaffected,
+      untouched, still the eager path internally), and `cachedContent` is only ever
+      assigned from one of those 5 read re-opens, never from a write call's own return
+      value (writes return a UUID or nothing). So this consumer turned out to have NONE
+      of the write-path complexity the original grooming note worried about — every
+      `openVault` call switched cleanly to `openReadOnlyVault`, `cachedContent` switched
+      from `KDBXContent?` to `(any VaultReadableContent)?`, and `populateIdentityStore
+      (entries:content:)` (the one place taking `content` as an explicit parameter, used
+      only via the already-generic `passkeyMetadata(in:...)`) switched its parameter type
+      to match. The now-unused `import KDBXKit` removed. No test target for this file
+      (SwiftUI/AppKit app layer) — verified by `xcodebuild` compiling it, same as every
+      other app-layer change in this ROADMAP.
+- [ ] Thread the metadata-only read path (`VaultService.openReadOnlyVault`) into
+      `CredentialProviderViewController`'s own session-cached `openVault(at:...)` calls —
+      part (2c), the last of the original three-consumer split. NOT assumed to be as
+      clean a migration as part (2b) turned out to be: `CredentialProviderViewController`
+      (952 lines, vs. `VaultController`'s ~685) is meaningfully larger and handles more
+      flows (password/OTP/passkey assertion, interactive AND conditional passkey
+      registration, the manual credential picker) — its `cachedContent`'s exact call
+      graph (which of its `openVault` call sites are read-only re-opens like
+      `VaultController`'s turned out to be, vs. genuinely needing the eager
+      `KDBXContent`, e.g. anywhere it might pass `cachedContent` into a write-adjacent
+      path) needs the same full, non-assumed trace part (2a)/(2b) both did before
+      touching anything. No test target for this file either — compiled-only,
+      `xcodebuild`-verified, same as (2b). If the trace turns up genuine complexity
+      `VaultController` didn't have, this is exactly the kind of item to re-groom into a
+      narrower slice rather than force through a single PR.
 - [x] ~~`updateEntry` never populated `entry.history`, silently breaking KeePass version
       history~~ — done, see `docs/done/2026-09-05-update-entry-history-preservation.md`.
       Found via a continued adversarial review this run (seventh finding, after #60–#66),
