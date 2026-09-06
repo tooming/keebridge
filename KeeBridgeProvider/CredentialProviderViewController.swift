@@ -46,13 +46,14 @@
 //   appear but never resolve. A biometric prompt blocking main briefly
 //   while the user responds is normal, expected system UI behavior, not a
 //   hang.
-// - Argon2id key derivation (inside VaultService.openVault) is deliberately
-//   slow CPU work with no UI dependency, and DOES need to move off main —
-//   that's what workQueue is for.
+// - Argon2id key derivation (inside VaultService.openVault/openReadOnlyVault)
+//   is deliberately slow CPU work with no UI dependency, and DOES need to
+//   move off main — that's what workQueue is for.
 //
-// v3 (session content cache): the vault is opened via `openVault` at most
-// once per `contentCacheTTL` window, then held in `cachedContent` — reveals
-// against an already-open KDBXContent (`revealField(in:)`,
+// v3 (session content cache): the vault is opened via `openReadOnlyVault` (v7:
+// metadata-only, no binary attachment bytes retained — see VaultReadableContent)
+// at most once per `contentCacheTTL` window, then held in `cachedContent` —
+// reveals against an already-open content (`revealField(in:)`,
 // `currentTOTPCode(in:)`) are pure in-memory operations (inner-stream-cipher
 // decrypt only, not Argon2) and run directly on the main thread, no
 // workQueue hop needed. This is what actually fixed "each field on a page
@@ -76,7 +77,6 @@ import AppKit
 import SwiftUI
 import AuthenticationServices
 import KeeBridgeCore
-import KDBXKit
 import os
 
 final class CredentialProviderViewController: ASCredentialProviderViewController {
@@ -125,12 +125,19 @@ final class CredentialProviderViewController: ASCredentialProviderViewController
     // a long-lived Safari session could keep serving vault data from
     // before the last KeePassXC edit indefinitely. Expiring this alone
     // costs one background Argon2 pass to refresh, not a new Touch ID
-    // prompt, as long as cachedPreHash is still warm.
-    private static var cachedContent: KDBXContent?
+    // prompt, as long as cachedPreHash is still warm. `any
+    // VaultReadableContent`, not the concrete `KDBXContent` (v7): every
+    // read below is generic over it (`VaultReadableContent`), and the one
+    // WRITE this file performs (`completePasskeyRegistration`'s
+    // `vaultService.setPasskey`) never reads from this cache — it opens
+    // its own fresh copy internally and this cache is explicitly
+    // invalidated (not re-cached) right after, so nothing here ever needs
+    // the eager type.
+    private static var cachedContent: (any VaultReadableContent)?
     private static var cachedContentDate: Date?
     private static let contentCacheTTL: TimeInterval = 5 * 60
 
-    private static func validCachedContent() -> KDBXContent? {
+    private static func validCachedContent() -> (any VaultReadableContent)? {
         guard let content = cachedContent, let date = cachedContentDate,
               Date().timeIntervalSince(date) < contentCacheTTL
         else { return nil }
@@ -420,7 +427,7 @@ final class CredentialProviderViewController: ASCredentialProviderViewController
         workQueue.async { [weak self] in
             guard let self else { return }
             do {
-                let content = try self.vaultService.openVault(at: vaultURL, rawKeyData: preHash)
+                let content = try self.vaultService.openReadOnlyVault(at: vaultURL, rawKeyData: preHash)
                 self.log.notice("openContentThenProceed: opened+cached content, \(self.vaultService.listEntries(in: content).count) entries")
                 DispatchQueue.main.async {
                     Self.cachedContent = content
@@ -428,7 +435,7 @@ final class CredentialProviderViewController: ASCredentialProviderViewController
                     self.proceed(withContent: content)
                 }
             } catch {
-                self.log.error("openContentThenProceed: openVault failed: \(String(describing: error))")
+                self.log.error("openContentThenProceed: openReadOnlyVault failed: \(String(describing: error))")
                 DispatchQueue.main.async {
                     self.respondCancel(withError: error)
                 }
@@ -453,10 +460,10 @@ final class CredentialProviderViewController: ASCredentialProviderViewController
             guard let self else { return }
             do {
                 // Argon2id KDF — background thread, no UI dependency.
-                // openVault also verifies the password is correct (throws
-                // if not) and gives us the content to cache directly, no
-                // separate verify-then-open round trip needed.
-                let content = try self.vaultService.openVault(at: vaultURL, masterPassword: password)
+                // openReadOnlyVault also verifies the password is correct
+                // (throws if not) and gives us the content to cache
+                // directly, no separate verify-then-open round trip needed.
+                let content = try self.vaultService.openReadOnlyVault(at: vaultURL, masterPassword: password)
                 let preHash = self.vaultService.preHashKeyData(forPassword: password)
                 self.log.notice("handleUnlock: Argon2id verify succeeded, hopping to main to store in Keychain")
                 DispatchQueue.main.async {
@@ -487,7 +494,7 @@ final class CredentialProviderViewController: ASCredentialProviderViewController
         }
     }
 
-    private func proceed(withContent content: KDBXContent) {
+    private func proceed(withContent content: any VaultReadableContent) {
         log.debug("proceed(withContent:) — havePendingCredentialRequest=\(self.pendingCredentialRequest != nil), havePendingPasskeyRegistrationRequest=\(self.pendingPasskeyRegistrationRequest != nil)")
         if #available(macOS 14.0, *), let registrationRequest = pendingPasskeyRegistrationRequest {
             // Same viewDidAppear gating as the completeCredential branch
@@ -519,7 +526,7 @@ final class CredentialProviderViewController: ASCredentialProviderViewController
     // these anymore: it's owned by the top-level flow above, which is
     // already true by the time any of these run.
 
-    private func completeCredential(for credentialRequest: ASCredentialRequest, content: KDBXContent) {
+    private func completeCredential(for credentialRequest: ASCredentialRequest, content: any VaultReadableContent) {
         log.notice("completeCredential: recordIdentifier=\(credentialRequest.credentialIdentity.recordIdentifier ?? "nil", privacy: .public), isOTP=\(credentialRequest.credentialIdentity is ASOneTimeCodeCredentialIdentity)")
 
         if #available(macOS 14.0, *), let passkeyRequest = credentialRequest as? ASPasskeyCredentialRequest {
@@ -550,7 +557,7 @@ final class CredentialProviderViewController: ASCredentialProviderViewController
     // never writes.
 
     @available(macOS 14.0, *)
-    private func completePasskeyAssertion(for request: ASPasskeyCredentialRequest, content: KDBXContent) {
+    private func completePasskeyAssertion(for request: ASPasskeyCredentialRequest, content: any VaultReadableContent) {
         guard let identity = request.credentialIdentity as? ASPasskeyCredentialIdentity,
               let recordIdentifier = identity.recordIdentifier
         else {
@@ -614,7 +621,7 @@ final class CredentialProviderViewController: ASCredentialProviderViewController
     }
 
     @available(macOS 14.0, *)
-    private func beginPasskeyRegistration(for request: ASCredentialRequest, content: KDBXContent) {
+    private func beginPasskeyRegistration(for request: ASCredentialRequest, content: any VaultReadableContent) {
         guard let passkeyRequest = request as? ASPasskeyCredentialRequest,
               let identity = passkeyRequest.credentialIdentity as? ASPasskeyCredentialIdentity
         else {
@@ -771,7 +778,7 @@ final class CredentialProviderViewController: ASCredentialProviderViewController
         completePasskeyRegistration(for: registrationRequest, identity: identity, entry: matching[0])
     }
 
-    private func completePasswordCredential(content: KDBXContent, recordIdentifier: String, username: String) {
+    private func completePasswordCredential(content: any VaultReadableContent, recordIdentifier: String, username: String) {
         let password = vaultService.revealField(in: content, entryUUID: recordIdentifier, fieldKey: "Password")
         log.notice("completePasswordCredential: revealField returned, found=\(password != nil)")
         guard let password else {
@@ -781,7 +788,7 @@ final class CredentialProviderViewController: ASCredentialProviderViewController
         respondComplete(with: ASPasswordCredential(user: username, password: password))
     }
 
-    private func completeOTPCredential(content: KDBXContent, recordIdentifier: String) {
+    private func completeOTPCredential(content: any VaultReadableContent, recordIdentifier: String) {
         do {
             let code = try vaultService.currentTOTPCode(in: content, entryUUID: recordIdentifier)
             log.notice("completeOTPCredential: currentTOTPCode returned, found=\(code != nil)")
@@ -798,7 +805,7 @@ final class CredentialProviderViewController: ASCredentialProviderViewController
 
     // MARK: - Manual list
 
-    private func showList(content: KDBXContent) {
+    private func showList(content: any VaultReadableContent) {
         // Transitioning to "list shown, waiting on the user to pick one" —
         // legitimately idle, not mid-request-processing anymore.
         isWorking = false
@@ -816,7 +823,7 @@ final class CredentialProviderViewController: ASCredentialProviderViewController
         })
     }
 
-    private func completeSelection(entry: VaultLoginEntry, content: KDBXContent) {
+    private func completeSelection(entry: VaultLoginEntry, content: any VaultReadableContent) {
         // The manual list (showList) shows EVERY entry in the vault, not just
         // ones with a Password field — a passkey-only entry (no traditional
         // login at all) or any other entry someone picks from "Passwords…"

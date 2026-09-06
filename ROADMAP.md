@@ -606,21 +606,30 @@
       to match. The now-unused `import KDBXKit` removed. No test target for this file
       (SwiftUI/AppKit app layer) — verified by `xcodebuild` compiling it, same as every
       other app-layer change in this ROADMAP.
-- [ ] Thread the metadata-only read path (`VaultService.openReadOnlyVault`) into
-      `CredentialProviderViewController`'s own session-cached `openVault(at:...)` calls —
-      part (2c), the last of the original three-consumer split. NOT assumed to be as
-      clean a migration as part (2b) turned out to be: `CredentialProviderViewController`
-      (952 lines, vs. `VaultController`'s ~685) is meaningfully larger and handles more
-      flows (password/OTP/passkey assertion, interactive AND conditional passkey
-      registration, the manual credential picker) — its `cachedContent`'s exact call
-      graph (which of its `openVault` call sites are read-only re-opens like
-      `VaultController`'s turned out to be, vs. genuinely needing the eager
-      `KDBXContent`, e.g. anywhere it might pass `cachedContent` into a write-adjacent
-      path) needs the same full, non-assumed trace part (2a)/(2b) both did before
-      touching anything. No test target for this file either — compiled-only,
-      `xcodebuild`-verified, same as (2b). If the trace turns up genuine complexity
-      `VaultController` didn't have, this is exactly the kind of item to re-groom into a
-      narrower slice rather than force through a single PR.
+- [x] ~~Thread the metadata-only read path into `CredentialProviderViewController`'s
+      session cache~~ — **part (2c) of 3 done — the attachment memory-footprint item's
+      full 3-part split is now complete**, see
+      `docs/done/2026-09-06-provider-read-only-vault.md`. Traced the full call graph
+      first, same discipline as (2a)/(2b), NOT assumed to be as clean as part (2b) turned
+      out to be given this file's larger size (952 lines) and extra flows (password/OTP/
+      passkey assertion, interactive AND conditional passkey registration, the manual
+      picker) — but it turned out just as clean: both `openVault` call sites
+      (`openContentThenProceed`/`handleUnlock`) are read-only unlocks, and every one of
+      the 8 functions taking `content` as a parameter (`proceed(withContent:)`,
+      `completeCredential`, `completePasskeyAssertion`, `beginPasskeyRegistration`,
+      `completePasswordCredential`, `completeOTPCredential`, `showList`,
+      `completeSelection`) only ever reads through it (`listEntries`/`revealField`/
+      `currentTOTPCode`/`revealPasskeyPrivateKeyPEM`/`passkeyMetadata`, all already
+      generic). This file's one WRITE (`completePasskeyRegistration`'s
+      `vaultService.setPasskey`) doesn't take `content` as a parameter at all — it opens
+      its own fresh copy internally via `vaultURL`/`cachedPreHash`, and the existing code
+      already explicitly invalidates (not re-caches) `Self.cachedContent` right after
+      that write, exactly the "never write through this cache" pattern parts (2a)/(2b)
+      both had. `cachedContent`/`validCachedContent()` switched from `KDBXContent?` to
+      `(any VaultReadableContent)?`; both `openVault` call sites switched to
+      `openReadOnlyVault`; all 8 `content:` parameter types switched to
+      `any VaultReadableContent`; the now-unused `import KDBXKit` removed. No test target
+      for this file — compiled-only, `xcodebuild`-verified, same as (2b).
 - [x] ~~`updateEntry` never populated `entry.history`, silently breaking KeePass version
       history~~ — done, see `docs/done/2026-09-05-update-entry-history-preservation.md`.
       Found via a continued adversarial review this run (seventh finding, after #60–#66),
