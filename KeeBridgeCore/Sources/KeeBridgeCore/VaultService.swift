@@ -106,8 +106,11 @@ public struct VaultService: Sendable {
     /// Lightweight metadata for every login-type entry in an already-open
     /// vault (title, username, URL, and the *names* of any custom fields).
     /// Never returns a field *value* other than title/username/URL. Pure
-    /// in-memory walk — no I/O, no KDF, safe to call repeatedly.
-    public func listEntries(in content: KDBXContent) -> [VaultLoginEntry] {
+    /// in-memory walk — no I/O, no KDF, safe to call repeatedly. Generic
+    /// over `VaultReadableContent` (see that file) so it works the same
+    /// whether `content` came from the eager `openVault` or the
+    /// metadata-only read path the `at url:` convenience below uses.
+    public func listEntries(in content: some VaultReadableContent) -> [VaultLoginEntry] {
         var results: [VaultLoginEntry] = []
 
         func standardValue(_ entry: KDBX.Entry, _ key: String) -> String {
@@ -143,17 +146,19 @@ public struct VaultService: Sendable {
     }
 
     /// Opens the vault fresh from disk and lists its entries in one call —
-    /// convenience for one-off reads (VaultProbe, tests). Pays the full
-    /// I/O + KDF cost every time; prefer `openVault` once + `listEntries(in:)`
-    /// repeatedly for anything that reads more than once in a session.
+    /// convenience for one-off reads (VaultProbe, tests). Pays the full I/O
+    /// + KDF cost every time; prefer `openVault` once + `listEntries(in:)`
+    /// repeatedly for anything that reads more than once in a session. Uses
+    /// the metadata-only open path (`openReadOnlyContent`) — no binary
+    /// attachment's bytes are ever materialized just to list titles.
     public func listEntries(at url: URL, masterPassword: String) throws -> [VaultLoginEntry] {
-        listEntries(in: try openVault(at: url, masterPassword: masterPassword))
+        listEntries(in: try openReadOnlyContent(at: url, unlock: UnlockData(masterPassword: masterPassword)))
     }
 
     /// Same as `listEntries(at:masterPassword:)`, unlocking from a cached
     /// pre-hash instead.
     public func listEntries(at url: URL, rawKeyData: Data) throws -> [VaultLoginEntry] {
-        listEntries(in: try openVault(at: url, rawKeyData: rawKeyData))
+        listEntries(in: try openReadOnlyContent(at: url, unlock: UnlockData(rawKeyData: rawKeyData)))
     }
 
     // MARK: - Field reveal (credential-selection time only)
@@ -161,7 +166,8 @@ public struct VaultService: Sendable {
     /// Decrypts and returns a single field's *value* for one entry, by UUID
     /// and field key, from an already-open vault. Pure in-memory walk +
     /// inner-stream-cipher decrypt (fast, not Argon2) — no I/O, no KDF.
-    public func revealField(in content: KDBXContent, entryUUID: String, fieldKey: String) -> String? {
+    /// Generic over `VaultReadableContent` — see `listEntries(in:)`.
+    public func revealField(in content: some VaultReadableContent, entryUUID: String, fieldKey: String) -> String? {
         var found: String?
 
         func walk(_ group: KDBX.Group) {
@@ -187,13 +193,13 @@ public struct VaultService: Sendable {
     /// convenience for one-off reads. See `revealField(in:entryUUID:fieldKey:)`
     /// for the reusable, no-KDF form.
     public func revealField(at url: URL, masterPassword: String, entryUUID: String, fieldKey: String) throws -> String? {
-        revealField(in: try openVault(at: url, masterPassword: masterPassword), entryUUID: entryUUID, fieldKey: fieldKey)
+        revealField(in: try openReadOnlyContent(at: url, unlock: UnlockData(masterPassword: masterPassword)), entryUUID: entryUUID, fieldKey: fieldKey)
     }
 
     /// Same as `revealField(at:masterPassword:entryUUID:fieldKey:)`, unlocking
     /// from a cached pre-hash instead.
     public func revealField(at url: URL, rawKeyData: Data, entryUUID: String, fieldKey: String) throws -> String? {
-        revealField(in: try openVault(at: url, rawKeyData: rawKeyData), entryUUID: entryUUID, fieldKey: fieldKey)
+        revealField(in: try openReadOnlyContent(at: url, unlock: UnlockData(rawKeyData: rawKeyData)), entryUUID: entryUUID, fieldKey: fieldKey)
     }
 
     // MARK: - TOTP (credential-selection time only)
@@ -203,7 +209,7 @@ public struct VaultService: Sendable {
     /// header) and returns the current 6-digit-by-default code, from an
     /// already-open vault. `nil` if the entry has no `otp` field at all
     /// (most entries don't). Pure in-memory — no I/O, no KDF.
-    public func currentTOTPCode(in content: KDBXContent, entryUUID: String) throws -> String? {
+    public func currentTOTPCode(in content: some VaultReadableContent, entryUUID: String) throws -> String? {
         guard let otpauthURI = revealField(in: content, entryUUID: entryUUID, fieldKey: "otp"),
               !otpauthURI.isEmpty
         else { return nil }
@@ -215,13 +221,13 @@ public struct VaultService: Sendable {
     /// in one call — convenience for one-off reads. See
     /// `currentTOTPCode(in:entryUUID:)` for the reusable, no-KDF form.
     public func currentTOTPCode(at url: URL, masterPassword: String, entryUUID: String) throws -> String? {
-        try currentTOTPCode(in: try openVault(at: url, masterPassword: masterPassword), entryUUID: entryUUID)
+        try currentTOTPCode(in: try openReadOnlyContent(at: url, unlock: UnlockData(masterPassword: masterPassword)), entryUUID: entryUUID)
     }
 
     /// Same as `currentTOTPCode(at:masterPassword:entryUUID:)`, unlocking
     /// from a cached pre-hash instead.
     public func currentTOTPCode(at url: URL, rawKeyData: Data, entryUUID: String) throws -> String? {
-        try currentTOTPCode(in: try openVault(at: url, rawKeyData: rawKeyData), entryUUID: entryUUID)
+        try currentTOTPCode(in: try openReadOnlyContent(at: url, unlock: UnlockData(rawKeyData: rawKeyData)), entryUUID: entryUUID)
     }
 
     // MARK: - Passkeys (read-only metadata + write/merge; signing lives in
@@ -257,7 +263,7 @@ public struct VaultService: Sendable {
     /// isn't a passkey (per `KDBX.Entry.isPasskey` — KDBXKit's own
     /// KeePassXC-compatible field detection). Pure in-memory — no I/O, no
     /// KDF, safe to call repeatedly.
-    public func passkeyMetadata(in content: KDBXContent, entryUUID: String) -> VaultPasskeyMetadata? {
+    public func passkeyMetadata(in content: some VaultReadableContent, entryUUID: String) -> VaultPasskeyMetadata? {
         guard let entry = Self.findEntry(in: content.database.root.group, uuid: entryUUID),
               entry.isPasskey
         else { return nil }
@@ -273,13 +279,13 @@ public struct VaultService: Sendable {
     /// metadata in one call — convenience for one-off reads. See
     /// `passkeyMetadata(in:entryUUID:)` for the reusable, no-KDF form.
     public func passkeyMetadata(at url: URL, masterPassword: String, entryUUID: String) throws -> VaultPasskeyMetadata? {
-        passkeyMetadata(in: try openVault(at: url, masterPassword: masterPassword), entryUUID: entryUUID)
+        passkeyMetadata(in: try openReadOnlyContent(at: url, unlock: UnlockData(masterPassword: masterPassword)), entryUUID: entryUUID)
     }
 
     /// Same as `passkeyMetadata(at:masterPassword:entryUUID:)`, unlocking
     /// from a cached pre-hash instead.
     public func passkeyMetadata(at url: URL, rawKeyData: Data, entryUUID: String) throws -> VaultPasskeyMetadata? {
-        passkeyMetadata(in: try openVault(at: url, rawKeyData: rawKeyData), entryUUID: entryUUID)
+        passkeyMetadata(in: try openReadOnlyContent(at: url, unlock: UnlockData(rawKeyData: rawKeyData)), entryUUID: entryUUID)
     }
 
     /// Reveals a passkey-bearing entry's private key PEM (PKCS#8) — the one
@@ -290,7 +296,7 @@ public struct VaultService: Sendable {
     /// `String` only for the caller's immediate use, from an already-open
     /// vault, pure in-memory (no I/O, no KDF). `nil` if no entry with that
     /// UUID exists, it isn't a passkey, or it has no private key stored.
-    public func revealPasskeyPrivateKeyPEM(in content: KDBXContent, entryUUID: String) -> String? {
+    public func revealPasskeyPrivateKeyPEM(in content: some VaultReadableContent, entryUUID: String) -> String? {
         guard let entry = Self.findEntry(in: content.database.root.group, uuid: entryUUID),
               entry.isPasskey
         else { return nil }
@@ -642,7 +648,7 @@ public struct VaultService: Sendable {
     /// Reveals an existing entry's editable fields, for populating an edit
     /// form, from an already-open vault. `nil` if no entry with that UUID
     /// exists. Pure in-memory — no I/O, no KDF.
-    public func revealEntry(in content: KDBXContent, uuid: String) -> EntryDraft? {
+    public func revealEntry(in content: some VaultReadableContent, uuid: String) -> EntryDraft? {
         guard let entry = Self.findEntry(in: content.database.root.group, uuid: uuid) else {
             return nil
         }
@@ -662,7 +668,7 @@ public struct VaultService: Sendable {
     /// a throw here to match this method's existing, already-tested
     /// behavior).
     public func revealEntry(uuid: String, at url: URL, rawKeyData: Data) throws -> EntryDraft {
-        let content = try openVault(at: url, rawKeyData: rawKeyData)
+        let content = try openReadOnlyContent(at: url, unlock: UnlockData(rawKeyData: rawKeyData))
         guard let draft = revealEntry(in: content, uuid: uuid) else {
             throw VaultWriteError.entryNotFound(uuid)
         }
@@ -676,7 +682,7 @@ public struct VaultService: Sendable {
     /// the caller actually specified) instead of blanking out every field
     /// `updateEntry`'s full-replace semantics don't hear about.
     public func revealEntry(uuid: String, at url: URL, masterPassword: String) throws -> EntryDraft {
-        let content = try openVault(at: url, masterPassword: masterPassword)
+        let content = try openReadOnlyContent(at: url, unlock: UnlockData(masterPassword: masterPassword))
         guard let draft = revealEntry(in: content, uuid: uuid) else {
             throw VaultWriteError.entryNotFound(uuid)
         }
@@ -742,18 +748,70 @@ public struct VaultService: Sendable {
 
     // MARK: - Shared decrypt/encrypt
 
-    private func openContent(at url: URL, unlock: UnlockData) throws -> KDBXContent {
+    private func readFileData(at url: URL) throws -> Data {
         guard FileManager.default.fileExists(atPath: url.path) else {
             throw VaultServiceError.fileNotFound(url.path)
         }
-        let data: Data
         do {
-            data = try Data(contentsOf: url)
+            return try Data(contentsOf: url)
         } catch {
             throw VaultServiceError.openFailed("could not read file: \(error)")
         }
+    }
+
+    private func openContent(at url: URL, unlock: UnlockData) throws -> KDBXContent {
+        let data = try readFileData(at: url)
         do {
             return try KDBXReader.parse(data, unlockData: unlock)
+        } catch {
+            throw VaultServiceError.openFailed("\(error)")
+        }
+    }
+
+    /// Opens a vault for READ-ONLY use, preferring KDBXKit's metadata-only
+    /// path (`KDBXReader.openMetadataOnly`) over the eager `openContent`
+    /// every write path still uses. `LazyKDBXContent`'s own doc comment:
+    /// "the binary payload bytes that would have lived on
+    /// `innerHeader.binaryContent[i].data` are intentionally not
+    /// retained." Every `VaultService` read function this feeds
+    /// (`listEntries`, `revealField`, `currentTOTPCode`, `passkeyMetadata`,
+    /// `revealEntry`, and `PaymentCard.swift`'s payment-card reads) is
+    /// generic over `VaultReadableContent` — see that file — specifically
+    /// so it can accept either this or the eager `KDBXContent` unchanged.
+    ///
+    /// KDBX 3.x vaults can't be opened metadata-only at all
+    /// (`openMetadataOnly`'s own doc comment: the 3.x on-disk layout has
+    /// no separable binary pool to re-slice later) — `openMetadataOnly`
+    /// throws `KDBXReader.Error.unsupportedFormatVersion(major: 3, ...)`
+    /// for those, which this function catches and falls back to the eager
+    /// parse for, matching that doc comment's own documented guidance to
+    /// callers. Every other error (wrong password, corrupted file, a
+    /// format version KDBXKit can't open at all) is NOT treated as a
+    /// fallback trigger — it propagates as `VaultServiceError.openFailed`,
+    /// same as `openContent`.
+    ///
+    /// `openVault(at:...)` (returning the concrete `KDBXContent`) is
+    /// UNCHANGED — the app, `KeeBridgeProvider`, and
+    /// `KeeBridgeCardExtension` all cache its result across a session,
+    /// and threading this lazy path through those session caches is a
+    /// separate, deliberately-deferred follow-up (see ROADMAP.md's
+    /// attachment memory-footprint entry). This function backs only the
+    /// one-off `at url:` read convenience methods above, which already
+    /// pay the full I/O + KDF cost on every call and have no session to
+    /// cache into.
+    func openReadOnlyContent(at url: URL, unlock: UnlockData) throws -> any VaultReadableContent {
+        let data = try readFileData(at: url)
+        do {
+            return try KDBXReader.openMetadataOnly(from: .data(data), unlockData: unlock)
+        } catch let error as KDBXReader.Error {
+            guard case .unsupportedFormatVersion(let major, _) = error, major == 3 else {
+                throw VaultServiceError.openFailed("\(error)")
+            }
+            do {
+                return try KDBXReader.parse(data, unlockData: unlock)
+            } catch {
+                throw VaultServiceError.openFailed("\(error)")
+            }
         } catch {
             throw VaultServiceError.openFailed("\(error)")
         }

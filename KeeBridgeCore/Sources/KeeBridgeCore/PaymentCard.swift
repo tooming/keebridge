@@ -117,7 +117,8 @@ public struct VaultPaymentCard: Sendable {
 extension VaultService {
     /// Returns card-selection metadata only. No card field value crosses this
     /// boundary; values are revealed solely by `revealPaymentCardFields`.
-    public func listPaymentCards(in content: KDBXContent) -> [VaultPaymentCard] {
+    /// Generic over `VaultReadableContent` — see that file.
+    public func listPaymentCards(in content: some VaultReadableContent) -> [VaultPaymentCard] {
         var cards: [VaultPaymentCard] = []
 
         func walk(_ group: KDBX.Group) {
@@ -146,7 +147,7 @@ extension VaultService {
     /// entry recognized as a card (a known card-number custom field is
     /// required). Missing requested fields are omitted from the result.
     public func revealPaymentCardFields(
-        in content: KDBXContent,
+        in content: some VaultReadableContent,
         entryUUID: String,
         fields: Set<PaymentCardField>
     ) -> [PaymentCardField: String]? {
@@ -184,14 +185,15 @@ extension VaultService {
     /// `listPaymentCards(in:)`, used for read-only display (`EntryDetailView`'s
     /// "Payment Card" section, `VaultProbe card`). Returns `nil` if the UUID
     /// doesn't match any recognized card entry.
-    public func paymentCardMetadata(in content: KDBXContent, entryUUID: String) -> VaultPaymentCard? {
+    public func paymentCardMetadata(in content: some VaultReadableContent, entryUUID: String) -> VaultPaymentCard? {
         listPaymentCards(in: content).first { $0.uuid == entryUUID }
     }
 
     /// Same as `paymentCardMetadata(in:entryUUID:)`, opening the vault fresh
-    /// from disk first — convenience for one-off reads (`VaultProbe`).
+    /// from disk first — convenience for one-off reads (`VaultProbe`). Uses
+    /// the metadata-only read path — see `VaultService.openReadOnlyContent`.
     public func paymentCardMetadata(at url: URL, masterPassword: String, entryUUID: String) throws -> VaultPaymentCard? {
-        paymentCardMetadata(in: try openVault(at: url, masterPassword: masterPassword), entryUUID: entryUUID)
+        paymentCardMetadata(in: try openReadOnlyContent(at: url, unlock: UnlockData(masterPassword: masterPassword)), entryUUID: entryUUID)
     }
 
     static func paymentCardExpirationParts(_ value: String) -> (month: String, year: String)? {
