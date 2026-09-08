@@ -653,6 +653,27 @@
 
 ## Needs maintainer/human action (not code)
 
+- [ ] Confirm whether `routines.yaml`'s `allowed_tools` actually gates the MCP tool
+      surface a scheduled executor run receives (#77). Found this cycle, re-surveying
+      `routines/` for the first time since it was written: `routines/README.md` and
+      `scripts/routines-author-check.sh`'s comments both assert the executor runs with
+      `allowed_tools = [Bash, Read, Write, Edit, Glob, Grep]` — "no `RemoteTrigger`" —
+      calling this "a hard tool-access limit, not a scope choice" that's the real
+      enforcement behind forbidding executor-authored `routines.yaml` edits. This run's
+      actual session tool list included a full `mcp__Claude_Code_Remote__*` suite
+      (`create_trigger`/`update_trigger`/`delete_trigger`/`fire_trigger`/`list_triggers`/
+      `send_later`) — functionally the "RemoteTrigger" capability the docs say isn't
+      granted, confirmed live by successfully calling `send_later` earlier this run.
+      Nothing was mutated (I did not call `update_trigger`/`create_trigger`/
+      `delete_trigger` against this repo's own trigger,
+      `trig_01Uz7L38vBHmKpg7fd6Hm7Qx`), but neither `routines-check.sh` nor
+      `routines-author-check.sh` would have caught it if I had — both are git-diff-based
+      checks against `routines.yaml`'s file content, not a runtime restriction, so a
+      direct tool call bypasses them entirely. This needs a human to confirm with the
+      Claude Code / claude.ai routines infrastructure whether `allowed_tools` is meant to
+      gate the runtime MCP tool surface and, if so, why it apparently didn't this run —
+      not something fixable by a Swift change or a doc edit alone until the actual
+      mechanism is confirmed. See #77 for full detail.
 - [x] ~~Decommission Proton Pass — final migration step (#5)~~ — done, by the maintainer's
       own hand: #5 was closed (`state_reason: completed`) on 2026-09-03. Marked `[x]` here
       (found via this run's GitHub-issue cross-check — every closed issue this ROADMAP
