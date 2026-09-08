@@ -26,6 +26,10 @@ routines-mark-applied: ## Refresh .routines-applied — run ONLY after applying 
 routines-author-check: ## Fail if an executor-authored (auto/*) change edits routines.yaml — the executor can't apply it to the live trigger (drift detector)
 	@bash scripts/routines-author-check.sh
 
+.PHONY: routines-bats-test
+routines-bats-test: ## Fixture-based unit tests for the routines-check.sh/routines-author-check.sh drift detectors themselves (needs bats-core)
+	@bats tests/drift-detectors.bats
+
 .PHONY: ci
 ci: ## Run every gate this repo has: test + unsigned build + VaultProbe build + routines drift checks
 	@$(MAKE) test
@@ -33,3 +37,4 @@ ci: ## Run every gate this repo has: test + unsigned build + VaultProbe build + 
 	@$(MAKE) probe-build
 	@$(MAKE) routines-check
 	@$(MAKE) routines-author-check
+	@$(MAKE) routines-bats-test
