@@ -25,6 +25,30 @@
 
 ## Now / next
 
+- [ ] Add a `bats` test suite for the `routines/` drift-detector scripts
+      (`scripts/routines-check.sh`, `scripts/routines-author-check.sh`). Found this
+      cycle: `routines-author-check.sh`'s own header comment claimed "bats coverage in
+      `tests/drift-detectors.bats`" — that file has never existed in this repo (confirmed
+      by `grep -rn "drift-detectors\|\.bats\b"` across everything, including
+      `.github/workflows/ci.yml`, which has no bats step at all); the comment was
+      apparently copied from a sibling repo's pattern (`tooming/k8s-anywhere`,
+      `toomingsolutions/easysportstream`) without being adjusted for this repo's actual
+      state. Fixed the false claim this cycle (comment now accurately says no such suite
+      exists yet), but not the underlying gap — both scripts already have
+      environment-variable test seams purpose-built for exactly this
+      (`ROUTINESCHECK_ROOT` on `routines-check.sh`; `ROUTINES_AUTHOR_ROOT`/`_BRANCH`/
+      `_FILES`/`_IS_CLOUD` on `routines-author-check.sh`, see that script's own header for
+      what each overrides), unused by anything. Not implemented this cycle: needs `bats`
+      actually available to write and validate against (not installed in this executor's
+      local environment; CI's `macos-latest` runner may need a `brew install bats-core`
+      step added too, its own small piece of scope), and a real test suite deserves
+      fixture trees + multiple scenarios per script (clean, drifted, missing snapshot,
+      executor-branch vs. interactive-branch author detection) rather than being rushed
+      through without any way to see it actually pass before pushing. A future cycle
+      picking this up should design the fixture layout first, write the suite, add
+      whatever `make`/CI wiring it needs, and let CI be the actual proof it runs and
+      passes — same discipline as every other change this run's cycles have used for
+      changes this executor's environment can't validate locally.
 - [x] ~~Evaluate upgrading `swift-crypto` from the `3.x` series to `4.x`~~ — investigated
       last cycle (kept unimplemented pending a real API-diff read, not a Swift toolchain
       limitation as first assumed — CI itself has one), implemented this cycle once that

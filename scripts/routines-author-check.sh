@@ -36,10 +36,19 @@
 # If an executor-authored change touches routines.yaml -> fail. Interactive
 # sessions (any other branch + a human commit author) pass, since they CAN apply.
 #
-# Mirrors the readme-check / roadmap-check / routines-check drift guards:
-# scripts/<thing>-check.sh + `make routines-author-check` in `make ci` + bats
-# coverage in tests/drift-detectors.bats. Also runs in the GitHub Actions drift job
-# (the real gate on a pushed auto/* PR — see .github/workflows/ci.yml).
+# Mirrors the readme-check / roadmap-check / routines-check drift-guard pattern from
+# the sibling repos (tooming/k8s-anywhere, toomingsolutions/easysportstream): a
+# scripts/<thing>-check.sh + `make routines-author-check` in `make ci`. Unlike those
+# siblings, this repo has NO `tests/drift-detectors.bats` (or any bats suite) --
+# checked 2026-09-08, confirmed by grep across the whole repo and the CI workflow,
+# neither has ever referenced one despite this comment (copied from a sibling repo
+# without adjusting for this) previously claiming otherwise. The ROUTINES_AUTHOR_ROOT/
+# _BRANCH/_FILES/_IS_CLOUD environment-variable seams below exist specifically to make
+# this script fixture-testable without real git history -- see ROADMAP.md's "Now / next"
+# for the groomed-but-not-yet-implemented item to actually build that suite. This script
+# IS still exercised for real: `make routines-author-check` runs it against the actual
+# repo state, in the GitHub Actions drift job (the real gate on a pushed auto/* PR — see
+# .github/workflows/ci.yml) — just not via dedicated fixture-based unit tests yet.
 #
 # Exit 0 = clean; 1 = an executor-authored change touched routines.yaml.
 #
