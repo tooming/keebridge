@@ -25,6 +25,30 @@
 
 ## Now / next
 
+- [ ] Evaluate upgrading `swift-crypto` from the `3.x` series to `4.x` (currently pinned
+      `from: "3.0.0"`, which SwiftPM resolves to the latest `3.x` — `3.15.1` as of
+      2026-09-08 — never `4.x`, per SemVer's `from:` semantics). Investigated, not
+      implemented, this cycle: cloned `apple/swift-crypto` fresh and confirmed
+      `4.0.0`-`4.5.2` exist upstream, requiring Swift 6.0+ (KeeBridge already builds under
+      `SWIFT_VERSION: "6.1"`, so the Swift-version gate isn't a blocker). Checked whether
+      staying on `3.x` leaves a known security gap for KeeBridge's actual usage
+      (`grep`'d every `Crypto`-module symbol this codebase touches: `P256`,
+      `SHA256`/`SHA512`, `HMAC`, `Insecure` (SHA-1, RFC 6238 TOTP compatibility only) —
+      confirmed via `PasskeyCrypto.swift`/`TOTPGenerator.swift`'s own `import Crypto`
+      sites). Found one security-hardening commit upstream not yet in any `3.x` tag
+      ("Enforce a 2048-bit minimum on RSA raw number initializers", 2026-09-01) — verified
+      it doesn't apply here: KeeBridge never uses RSA anywhere (zero matches repo-wide).
+      No other known vulnerability identified for the currently-resolved `3.15.1`. Not
+      implementing a version bump this cycle per STEP 4's crypto hard rule (a major-version
+      dependency bump is exactly the kind of crypto-adjacent change that needs to be the
+      explicit, validated point of its own PR, not something rushed through without a
+      Swift toolchain to actually build against `4.x`'s API — this executor's environment
+      has none locally, only via CI). A future cycle picking this up should: (1) read
+      swift-crypto's `4.0.0` release notes for the actual `2.x→4.x` breaking-API diff
+      against the four symbols this codebase uses, (2) bump the constraint and let CI's
+      real `swift test`/`xcodebuild` prove it still compiles and passes, (3) not treat this
+      as urgent — no known vulnerability motivates it, it's dependency hygiene, not an
+      incident response.
 - [x] ~~Credit card autofill: native-messaging vs. local-decrypt design spike (#3)~~ —
       done, see `docs/done/2026-08-26-card-autofill-design-spike.md`. Recommendation:
       local-decrypt via the same "unsandboxed app mirrors into the sandboxed extension's
