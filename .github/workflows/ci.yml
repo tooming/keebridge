@@ -3,9 +3,15 @@ name: ci
 # The only gate this repo has: swift test (KeeBridgeCore, no signing needed) + an
 # unsigned xcodebuild build (KeeBridge, embeds both extensions) + a swift build
 # of VaultProbe (its own SPM package, not part of the Xcode project) + the
-# routines/ drift checks. Runs on macos-latest since swift/xcodebuild need a real
-# macOS toolchain — there's no clusterless/Linux-only split like the sibling
-# repos, this whole repo is macOS-only.
+# routines/ drift checks + their own bats unit tests (tests/drift-detectors.bats).
+# Runs on macos-latest since swift/xcodebuild need a real macOS toolchain — there's
+# no clusterless/Linux-only split like the sibling repos, this whole repo is
+# macOS-only.
+#
+# bats-core install: `command -v bats ||` guards against erroring if a future
+# macos-latest image ships it preinstalled (Homebrew's `install` on an
+# already-installed formula warns but doesn't fail either way — the guard just
+# avoids the wasted install time on every run if it's ever preinstalled).
 #
 # `push` is scoped to main only; `pull_request` already covers every branch's PR
 # (opened/synchronize/reopened, including rebase pushes) — see tooming/k8s-anywhere's
@@ -33,8 +39,11 @@ jobs:
           fetch-depth: 0
       - name: Fetch main for drift comparison
         run: git fetch --no-tags origin +refs/heads/main:refs/remotes/origin/main || true
+      - name: Install bats-core
+        run: command -v bats || brew install bats-core
       - run: make test
       - run: make build
       - run: make probe-build
       - run: make routines-check
       - run: make routines-author-check
+      - run: make routines-bats-test
