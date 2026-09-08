@@ -43,6 +43,17 @@
       resolve to the newest `4.x`. `make ci` (`swift test` + the unsigned `xcodebuild`
       build) is the real validation this actually compiles and passes against `4.x`'s
       API — see `docs/done/2026-09-08-swift-crypto-4x-upgrade.md`.
+      **Correction (next cycle, same run):** the PR's own self-review claimed CI had
+      "built against the newly-resolved swift-crypto 4.x package" — that was wrong. Both
+      `KeeBridgeCore/Package.resolved` and `VaultProbe/Package.resolved` were already
+      committed, pinning `swift-crypto` at `3.15.1`; SwiftPM only re-resolves a pinned
+      dependency when the existing pin stops satisfying the manifest's constraint, and
+      `3.15.1` still satisfies `"3.0.0"..<"5.0.0"` — so widening the range alone changed
+      nothing about what actually got built. CI's earlier green run validated the *widened
+      constraint compiles*, not a real `4.x` build. See
+      `docs/done/2026-09-08-swift-crypto-lockfile-refresh.md` for the actual fix (deleting
+      both lockfiles to force a genuine fresh resolution) and the manual-step issue filed
+      for restoring a committed, reproducible lockfile now correctly pinning `4.x`.
 - [x] ~~Credit card autofill: native-messaging vs. local-decrypt design spike (#3)~~ —
       done, see `docs/done/2026-08-26-card-autofill-design-spike.md`. Recommendation:
       local-decrypt via the same "unsandboxed app mirrors into the sandboxed extension's
