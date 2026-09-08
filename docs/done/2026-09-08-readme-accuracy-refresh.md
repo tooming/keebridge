@@ -17,7 +17,7 @@ Two real, shipped, user-facing behaviors turned up missing from the README:
   against "every other password manager in KeeBridge's own stated competitive set" (the
   original PR's own framing) would want to know is already there. Not mentioned anywhere
   in the README.
-- **Payment-card visibility in the app UI / `VaultProbe`** (#3xx-era work, see
+- **Payment-card visibility in the app UI / `VaultProbe`** (#51, see
   `docs/done/2026-09-03-payment-card-visibility-in-app-ui.md`): entries recognized as
   payment cards are visible read-only (never a field value) in the app's own
   secrets-management UI and in `VaultProbe`, mirroring the passkey visibility feature the
