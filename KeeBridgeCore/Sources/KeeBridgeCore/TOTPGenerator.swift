@@ -90,7 +90,17 @@ public enum TOTPGenerator {
         // Doubles that would otherwise slip past a naive "?? 30" fallback — either case
         // traps the UInt64 conversion rather than throwing. Same rationale as `digits`
         // above: catch it once here, not at every later call site.
-        guard period > 0, period.isFinite else {
+        //
+        // A period that's positive and finite but too small is the same class of bug
+        // in disguise: `timeIntervalSince1970 / period` grows without bound as period
+        // shrinks toward zero, and once that quotient exceeds UInt64.max (~1.8e19) the
+        // UInt64(...) conversion in currentCode(for:at:) traps exactly like the <=0/
+        // non-finite cases above — just reached via a division that overflows rather
+        // than one that's already invalid. `>= 1` (whole seconds — no real otpauth://
+        // URI, RFC 6238 default included, ever specifies a sub-second period) keeps
+        // the quotient for any realistic `Date` many orders of magnitude below that
+        // ceiling, with no meaningful URI rejected as a result.
+        guard period >= 1, period.isFinite else {
             throw TOTPError.invalidPeriod(period)
         }
 

@@ -143,3 +143,27 @@ private let rfc6238SHA1Secret = Data("12345678901234567890".utf8)
         }
     }
 }
+
+@Test func rejectsPeriodTooSmallToAvoidUInt64Overflow() {
+    // A period that's positive and finite still traps currentCode(for:at:)'s
+    // `UInt64(timeIntervalSince1970 / period)` conversion once it's small enough
+    // to push that quotient past UInt64.max — the same "crash, not a throwable
+    // error" failure mode rejectsZeroOrNegativePeriod/rejectsNonFinitePeriod
+    // above guard against, just reached by an overflowing division instead of an
+    // already-invalid one. 1e-10 is comfortably in that range for any realistic
+    // `Date` (2026's timeIntervalSince1970 ~1.77e9; 1.77e9 / 1e-10 ~1.77e19,
+    // already past UInt64.max ~1.8e19).
+    let uri = "otpauth://totp/Example:alice?secret=GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ&period=0.0000000001"
+    #expect(throws: TOTPError.self) {
+        try TOTPGenerator.parse(otpauthURI: uri)
+    }
+}
+
+@Test func acceptsPeriodAtTheOneSecondBoundary() throws {
+    // 1 is the smallest period parse() accepts — confirms the new lower bound
+    // doesn't reject a real (if unusual) whole-second period, only the
+    // overflow-inducing fractional ones above.
+    let uri = "otpauth://totp/Example:alice?secret=GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ&period=1"
+    let params = try TOTPGenerator.parse(otpauthURI: uri)
+    #expect(params.period == 1)
+}
