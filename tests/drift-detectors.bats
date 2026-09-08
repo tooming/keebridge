@@ -145,3 +145,49 @@ EOF
     run "$SCRIPTS/routines-author-check.sh"
   [ "$status" -eq 1 ]
 }
+
+# --- routines-mark-applied.sh ---
+#
+# The producer half of the contract routines-check.sh (above) consumes: these
+# tests exercise both scripts together, writing a real snapshot with one and
+# reading it back with the other, rather than just asserting on
+# routines-mark-applied.sh's own output in isolation.
+
+@test "routines-mark-applied: writes a snapshot routines-check.sh then reports clean" {
+  write_routines_yaml
+  ROUTINESMARKAPPLIED_ROOT="$ROOT" run "$SCRIPTS/routines-mark-applied.sh"
+  [ "$status" -eq 0 ]
+  [ -f "$ROOT/.routines-applied" ]
+  grep -q "^routines/routines.yaml sha256=$(sha_of "$ROOT/routines/routines.yaml")$" "$ROOT/.routines-applied"
+
+  ROUTINESCHECK_ROOT="$ROOT" run "$SCRIPTS/routines-check.sh"
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"in sync with last apply"* ]]
+}
+
+@test "routines-mark-applied: re-running after an edit updates the hash so routines-check.sh goes clean again" {
+  write_routines_yaml
+  ROUTINESMARKAPPLIED_ROOT="$ROOT" run "$SCRIPTS/routines-mark-applied.sh"
+  [ "$status" -eq 0 ]
+
+  write_routines_yaml "changed-prefix/"
+  ROUTINESCHECK_ROOT="$ROOT" run "$SCRIPTS/routines-check.sh"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"has been edited since last apply"* ]]
+
+  ROUTINESMARKAPPLIED_ROOT="$ROOT" run "$SCRIPTS/routines-mark-applied.sh"
+  [ "$status" -eq 0 ]
+  ROUTINESCHECK_ROOT="$ROOT" run "$SCRIPTS/routines-check.sh"
+  [ "$status" -eq 0 ]
+}
+
+@test "routines-mark-applied: no routines.yaml on disk writes a header-only snapshot, and routines-check.sh still no-ops" {
+  rm -rf "$ROOT/routines"
+  ROUTINESMARKAPPLIED_ROOT="$ROOT" run "$SCRIPTS/routines-mark-applied.sh"
+  [ "$status" -eq 0 ]
+  [ -f "$ROOT/.routines-applied" ]
+  ! grep -q "^routines/routines.yaml sha256=" "$ROOT/.routines-applied"
+
+  ROUTINESCHECK_ROOT="$ROOT" run "$SCRIPTS/routines-check.sh"
+  [ "$status" -eq 0 ]
+}
