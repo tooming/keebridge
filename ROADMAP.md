@@ -25,30 +25,24 @@
 
 ## Now / next
 
-- [ ] Evaluate upgrading `swift-crypto` from the `3.x` series to `4.x` (currently pinned
-      `from: "3.0.0"`, which SwiftPM resolves to the latest `3.x` — `3.15.1` as of
-      2026-09-08 — never `4.x`, per SemVer's `from:` semantics). Investigated, not
-      implemented, this cycle: cloned `apple/swift-crypto` fresh and confirmed
-      `4.0.0`-`4.5.2` exist upstream, requiring Swift 6.0+ (KeeBridge already builds under
-      `SWIFT_VERSION: "6.1"`, so the Swift-version gate isn't a blocker). Checked whether
-      staying on `3.x` leaves a known security gap for KeeBridge's actual usage
-      (`grep`'d every `Crypto`-module symbol this codebase touches: `P256`,
-      `SHA256`/`SHA512`, `HMAC`, `Insecure` (SHA-1, RFC 6238 TOTP compatibility only) —
-      confirmed via `PasskeyCrypto.swift`/`TOTPGenerator.swift`'s own `import Crypto`
-      sites). Found one security-hardening commit upstream not yet in any `3.x` tag
-      ("Enforce a 2048-bit minimum on RSA raw number initializers", 2026-09-01) — verified
-      it doesn't apply here: KeeBridge never uses RSA anywhere (zero matches repo-wide).
-      No other known vulnerability identified for the currently-resolved `3.15.1`. Not
-      implementing a version bump this cycle per STEP 4's crypto hard rule (a major-version
-      dependency bump is exactly the kind of crypto-adjacent change that needs to be the
-      explicit, validated point of its own PR, not something rushed through without a
-      Swift toolchain to actually build against `4.x`'s API — this executor's environment
-      has none locally, only via CI). A future cycle picking this up should: (1) read
-      swift-crypto's `4.0.0` release notes for the actual `2.x→4.x` breaking-API diff
-      against the four symbols this codebase uses, (2) bump the constraint and let CI's
-      real `swift test`/`xcodebuild` prove it still compiles and passes, (3) not treat this
-      as urgent — no known vulnerability motivates it, it's dependency hygiene, not an
-      incident response.
+- [x] ~~Evaluate upgrading `swift-crypto` from the `3.x` series to `4.x`~~ — investigated
+      last cycle (kept unimplemented pending a real API-diff read, not a Swift toolchain
+      limitation as first assumed — CI itself has one), implemented this cycle once that
+      diff was actually read. Upstream `swift-crypto`'s own README states plainly: 4.0.0's
+      *only* breaking change vs. 1.x/2.x/3.x is new cases added to the `CryptoError` enum,
+      and the maintainers' own recommended dependency range widens across the boundary
+      (`"1.0.0" ..< "5.0.0"`) rather than pinning below it. Verified this codebase never
+      exhaustively switches over Swift Crypto's `CryptoError` (zero matches — the only
+      `*Error` type this codebase pattern-matches on is its own `PasskeyCryptoError`), so
+      the one stated breaking change cannot affect it. Combined with the prior cycle's
+      findings (Swift 6.0+ requirement already met under `SWIFT_VERSION: "6.1"`, no RSA
+      usage so the one security-hardening commit not yet in a `3.x` tag doesn't apply
+      either way), this cleared the bar for a same-cycle bump rather than another
+      "groomed, not implemented" cycle: `KeeBridgeCore/Package.swift`'s constraint widened
+      from `from: "3.0.0"` (`>=3.0.0, <4.0.0`) to `"3.0.0"..<"5.0.0"`, letting SwiftPM
+      resolve to the newest `4.x`. `make ci` (`swift test` + the unsigned `xcodebuild`
+      build) is the real validation this actually compiles and passes against `4.x`'s
+      API — see `docs/done/2026-09-08-swift-crypto-4x-upgrade.md`.
 - [x] ~~Credit card autofill: native-messaging vs. local-decrypt design spike (#3)~~ —
       done, see `docs/done/2026-08-26-card-autofill-design-spike.md`. Recommendation:
       local-decrypt via the same "unsandboxed app mirrors into the sandboxed extension's

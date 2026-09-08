@@ -27,7 +27,14 @@ let package = Package(
             url: "https://github.com/shadone/KDBXKit.git",
             revision: "e9b8839f1226b82665e1e4b7f12f13635d189deb"
         ),
-        .package(url: "https://github.com/apple/swift-crypto.git", from: "3.0.0"),
+        // Widened from `from: "3.0.0"` (which SwiftPM resolves as `>=3.0.0, <4.0.0` --
+        // never floats to a major version) after confirming with upstream swift-crypto's
+        // own README that 4.0.0's only breaking change vs. 1.x/2.x/3.x is new cases added
+        // to `CryptoError`, and this codebase never exhaustively switches over that type
+        // (verified: zero matches for `CryptoError` outside this codebase's own
+        // `PasskeyCryptoError`). See ROADMAP.md's "Done" section for the investigation
+        // this bump is based on.
+        .package(url: "https://github.com/apple/swift-crypto.git", "3.0.0"..<"5.0.0"),
     ],
     targets: [
         .target(
