@@ -13,9 +13,16 @@ let package = Package(
         ),
     ],
     dependencies: [
-        // KDBXKit has no tagged release yet (checked 2026-08-07: zero tags,
-        // single `develop` branch). Pinning to a specific revision rather
-        // than `branch:` so this doesn't silently float to a future commit.
+        // KDBXKit gained tagged releases after this pin was first set (checked
+        // 2026-08-07: zero tags, single `develop` branch; re-checked 2026-09-08:
+        // v1.0.0-v1.3.0 now exist). The pinned revision below is still current --
+        // it's `develop`'s HEAD as of 2026-09-08, 41 commits ahead of v1.3.0's
+        // tagged commit -- so this is intentionally NOT a downgrade to the latest
+        // tag, just confirmation the tag's existence doesn't change what's
+        // actually newest. Pinning to a specific revision rather than `branch:`
+        // so this doesn't silently float to a future commit; a future cycle could
+        // reconsider tracking the newest tag once `develop` and tags converge,
+        // but switching now would regress 41 commits.
         .package(
             url: "https://github.com/shadone/KDBXKit.git",
             revision: "e9b8839f1226b82665e1e4b7f12f13635d189deb"
