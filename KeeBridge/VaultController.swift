@@ -691,7 +691,21 @@ final class VaultController: ObservableObject {
         if let lastRefreshDate, Date().timeIntervalSince(lastRefreshDate) < Self.refreshThrottleInterval {
             return
         }
-        lastRefreshDate = Date()
+        // Don't stamp lastRefreshDate here — only every path that actually
+        // completes a sync does that (unlock/refresh/createEntry/
+        // updateEntry/deleteEntry's own MainActor.run completions). This
+        // call can still no-op below (refreshFromCache's `!isWorking` guard,
+        // e.g. a write is already in flight) without falsely marking a sync
+        // as having just happened. The earlier version stamped it right
+        // here, unconditionally: an activation landing mid-write silently
+        // absorbed a legitimate refresh opportunity into a 15s throttle
+        // window for a sync that never actually ran, delaying how soon an
+        // external KeePassXC edit could show up (only found by tracing this
+        // call chain end-to-end — not something `make build`'s unsigned
+        // compile touches, since both versions type-check identically).
+        // Safe either way: a same-instant second activation before the
+        // first refresh's async work completes just re-hits the `isWorking`
+        // guard as a harmless no-op, not a duplicate refresh.
         refreshFromCache()
     }
 }
