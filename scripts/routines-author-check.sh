@@ -30,6 +30,17 @@
 # different live_prompt), it opens an issue for a human, the same way it defers
 # any other out-of-tier work.
 #
+# CAVEAT (see #77, unresolved as of 2026-09-08): this guard only diffs
+# routines.yaml's file content in git — it does not and cannot inspect or
+# restrict what tools a given run's session actually receives at runtime. A
+# 2026-09-08 run found its live tool grant included a RemoteTrigger-equivalent
+# MCP suite despite allowed_tools=[Bash,Read,Write,Edit,Glob,Grep], meaning a
+# direct update_trigger/create_trigger/delete_trigger call against the live
+# trigger — bypassing this file-diff guard entirely — may not currently be
+# prevented by anything technical. This script still closes the file-edit
+# vector described above; it does not close a direct-tool-call vector if one
+# is present.
+#
 # DETECTION (no claude.ai token needed): the executor always lands on a branch with
 # routines.yaml's `branch_prefix` (auto/), and commits as the cloud identity
 # "Claude <noreply@anthropic.com>". Either signal marks the change executor-authored.
