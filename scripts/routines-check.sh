@@ -55,6 +55,6 @@ while read -r rel _; do
 done < "$SNAP"
 
 if [ $drift -eq 0 ]; then
-  printf '  %s✓%s routines/ in sync with last apply\n' "$G" "$Z"
+  ok "routines/ in sync with last apply"
 fi
 exit $drift
