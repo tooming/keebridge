@@ -1,12 +1,21 @@
 // Copyright (c) 2026 Martin Tooming
 // SPDX-License-Identifier: MIT
 
-import Foundation
+@preconcurrency import Foundation
 import SafariServices
 import KeeBridgeCore
 import os
 
-final class SafariWebExtensionHandler: NSObject, NSExtensionRequestHandling {
+// @unchecked Sendable: every stored instance property is an immutable `let`
+// of an already-Sendable type (`VaultService`/`KeychainStore` are both
+// `Sendable` structs, `Logger` is Sendable too) — confirmed by inspection,
+// not assumed. The only actual mutable state is the `static` cache fields
+// below, which already carry their own `nonisolated(unsafe)` + workQueue-
+// serialization justification. This silences the compiler's cross-instance
+// Sendable warning for `self` at the `workQueue.async` capture site in
+// `beginRequest`, matching an invariant this file already documents and
+// relies on, not a new one.
+final class SafariWebExtensionHandler: NSObject, NSExtensionRequestHandling, @unchecked Sendable {
     private let vaultService = VaultService()
     private let keychain = KeychainStore(service: KeeBridgeConfig.cardExtensionKeychainService)
     private let log = Logger(subsystem: "com.martintooming.KeeBridge", category: "card-extension")

@@ -14,7 +14,7 @@
 
 import Foundation
 import AppKit
-import AuthenticationServices
+@preconcurrency import AuthenticationServices
 import KeeBridgeCore
 import os
 
