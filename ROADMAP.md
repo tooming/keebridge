@@ -777,6 +777,82 @@
       result, confirmed via the actual rebuilt log content: 4 real warnings → 2. No
       behavior change either way — every change here is a compile-time-only
       diagnostic annotation, `make ci` stayed green throughout.
+- [x] **Backfill: 8 already-shipped, already-merged fixes from 2026-09-08 had a
+      `docs/done/*.md` record but no `ROADMAP.md` line at all** — found via a fourth
+      re-survey angle this run (after `scripts/lib/colors.sh`, #107; a second pass
+      finding nothing, #108; and the Sendable-concurrency warnings, #109): checking
+      the *reverse* direction of the earlier "roadmap-reference-audit" cycle, which
+      only verified every path `ROADMAP.md` cites actually exists on disk. Nobody had
+      checked the other way — every `docs/done/*.md` file actually has a
+      corresponding `ROADMAP.md` line — until this cycle diffed the two directories
+      against every reference `ROADMAP.md` makes. This file's own header states "the
+      executor reads it fresh every run and picks the topmost unchecked `[ ]` item";
+      it doesn't cause re-work when the missing entries are already `[x]`-shaped
+      work, but it is a real, confirmed gap against this repo's own documented
+      convention (STEP 6 of `routines/executor.prompt.md`: every delivered cycle
+      updates `ROADMAP.md` *and* creates a `docs/done/` record, in the same PR) —
+      these 8 got the second half without the first, for one calendar day's worth of
+      cycles. (A ninth candidate, `docs/done/2026-09-05-roadmap-issue-sync.md`,
+      turned out to be a false positive on the naive filename grep — its content is
+      already fully present, just inline rather than cited by filename, in this
+      section's existing `#33`/`#5` bullets above.) Backfilling the real 8 here,
+      each verified against its actual `docs/done/` content before summarizing
+      (not restated from memory):
+      - ~~`refreshIfStale()`'s throttle timestamp could absorb a legitimate
+        refresh~~ — see `docs/done/2026-09-08-refresh-throttle-isworking-fix.md`.
+        Real UX-staleness bug (not security/data-loss): the throttle stamp was set
+        even on a call `refreshFromCache()`'s own `isWorking` guard immediately
+        no-op'd, delaying how soon an external vault edit (e.g. via KeePassXC) would
+        show up. Fixed by removing the premature stamp — every path that actually
+        performs a sync already stamps it in its own completion.
+      - ~~An extremely small (but positive, finite) TOTP `period` still crashed
+        `currentCode`~~ — see
+        `docs/done/2026-09-08-totp-tiny-period-overflow-fix.md`. A period like
+        `1e-10` passed the existing `period > 0 && period.isFinite` guard but still
+        overflowed `UInt64` in the `timeIntervalSince1970 / period` conversion
+        inside `currentCode`/`code(for:counter:)` — an uncatchable runtime crash,
+        not a throwable error. Tightened the guard to `period >= 1`; two new
+        `@Test` cases, `swift test`/CI-covered.
+      - ~~Zero test coverage for `KeeBridgeConfig`'s mirror-path functions~~ — see
+        `docs/done/2026-09-08-keebridgeconfig-test-coverage.md`. Six new tests
+        confirming the app/provider/card-extension mirror paths and the write-time
+        marker path land in the correct, distinct locations — a copy-paste bundle-ID
+        swap here would have broken mirror sync with every caller silently agreeing
+        on the wrong path. (`KeychainStore.swift`, the file's other coverage gap,
+        was investigated and left alone: it calls the real Security framework
+        directly with no injectable seam, so meaningful testing needs either real
+        Keychain access or Touch ID hardware, neither available here.)
+      - ~~README's "What works today" had fallen behind shipped behavior again~~ —
+        see `docs/done/2026-09-08-readme-accuracy-refresh.md`. Two real, shipped,
+        user-facing behaviors were undocumented: clipboard auto-clear (30s, guarded
+        by `NSPasteboard.changeCount`) and payment-card visibility in the app UI/
+        `VaultProbe`. Both claims verified against actual shipping code before
+        writing them, not restated from PR titles.
+      - ~~`scripts/routines-author-check.sh`'s header claimed a `bats` test suite
+        existed when it didn't~~ — see
+        `docs/done/2026-09-08-routines-bats-comment-fix.md`. The claim was very
+        likely inherited from a sibling repo's equivalent script and never adjusted
+        — same class of copy-paste-without-adaptation as this run's own
+        `scripts/lib/colors.sh` finding (#107), just caught two days earlier.
+        Comment corrected to state the real situation; the actual gap (a real bats
+        suite) groomed into `ROADMAP.md` for the next two items to implement.
+      - ~~Add a `bats` test suite for the `routines/` drift-detector scripts~~ — see
+        `docs/done/2026-09-08-routines-bats-suite.md`. `tests/drift-detectors.bats`,
+        12 cases across both drift-check scripts, wired into `make ci`/CI.
+        Deliberately broke `routines-check.sh`'s own exit-code line first and
+        confirmed exactly the tests that depend on it went red, to prove the suite
+        isn't vacuous, before restoring it.
+      - ~~Extend the bats suite to cover `routines-mark-applied.sh`~~ — see
+        `docs/done/2026-09-08-routines-mark-applied-bats-coverage.md`. Three more
+        cases exercising the *producer* script (`routines-mark-applied.sh`) and a
+        *detector* script together, not either in isolation — the actual contract
+        that matters. Same before/after mutation-testing discipline as the suite
+        it extends.
+      - ~~`KDBXKit` dependency comment said "no tagged release yet," but tags now
+        exist upstream~~ — see `docs/done/2026-09-08-kdbxkit-tag-comment-refresh.md`.
+        Confirmed by cloning upstream (not guessed): the pin is 41 commits *ahead*
+        of the newest tag (`v1.3.0`), so this is a stale-comment fix, not a
+        version-downgrade risk — the pinned revision itself is unchanged.
 
 ## Needs maintainer/human action (not code)
 
