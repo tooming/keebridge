@@ -698,6 +698,41 @@
       `swift test`/CI (unlike this run's app-layer/JS fixes) — history-snapshot ordering/
       field-fidelity/no-nested-history/no-validator-warnings, and `historyMaxItems`
       trimming.
+- [x] ~~`scripts/lib/colors.sh`'s doc comments described a duplication-extraction
+      history across files that don't exist anywhere in this repo~~ — done, see
+      `docs/done/2026-09-10-routines-colors-lib-cleanup.md`. Found during a STEP 6b
+      re-survey once the Swift/JS-focused audit angles (already covered exhaustively
+      by 20+ prior cycles — full-core reads, entitlements/pbxproj/gitignore/error-
+      handling/web-extension sweeps) turned up nothing new yet again, so this cycle
+      tried a genuinely fresh angle instead: the small bash `scripts/` tooling
+      supporting `routines-check.sh`/`routines-author-check.sh`. `scripts/lib/colors.sh`
+      (this repo's root commit, `0d94f91` — confirmed via `git log --follow`/
+      `git rev-list --max-parents=0`, so this is long-standing content, not a recent
+      regression) carried ~30 lines of comments narrating an "extraction" of `ok()`/
+      `bad()`/`skip()`/`phase()` out of "~19 scripts" including
+      `argocd-crd-ssa-check.sh`, `helm-chart-pin-check.sh`, `dr-bluegreen.sh`,
+      `validate-terraform.sh`, and "issue #957" — none of which exist anywhere in
+      KeeBridge (confirmed via a repo-wide grep). This reads like leftover content
+      from the sibling `k8s-anywhere` repo (which does have Argo CD/Helm/Terraform
+      scripts, per `docs/WAYS-OF-WORKING.md`'s cross-reference) that was never adapted
+      to this repo's own, much smaller reality: only two scripts source this file, and
+      between them they use exactly `$G`/`$R`/`$Z` and `bad()` — `$Y`/`$B` and
+      `ok()`/`skip()`/`phase()` were live but entirely uncalled dead code, confirmed by
+      grepping both callers. Fixed: trimmed the file to what this repo actually uses
+      and rewrote the header comment to describe this repo's own two callers, not a
+      fabricated cross-repo history. Also switched `routines-check.sh`/
+      `routines-author-check.sh`'s two success-path `printf`s (which already
+      duplicated `ok()`'s exact behavior by hand) to actually call `ok()`, so the
+      kept function has a real caller instead of being dead code itself — output text
+      unchanged, confirmed via the existing `tests/drift-detectors.bats` substring
+      assertions on both success messages. Verified via `bats tests/drift-detectors.bats`
+      (all 15 cases green, this executor's environment has `bats` installable via
+      `apt-get` same as prior cycles) and running `make routines-check`/
+      `make routines-author-check` directly against this repo's own real state (both
+      print the real `✓` line via the now-actually-used `ok()`). Bash-only change, no
+      Swift touched — `make test`/`make build`/`make probe-build` are unaffected and
+      unexercised locally (no Swift toolchain in this executor's own environment, same
+      documented limit as every other cycle), left to this PR's GitHub Actions run.
 
 ## Needs maintainer/human action (not code)
 

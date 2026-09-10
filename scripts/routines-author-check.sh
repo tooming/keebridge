@@ -141,5 +141,5 @@ if [ "${#touched[@]}" -gt 0 ] && { [ "$executor_branch" -eq 1 ] || [ "$cloud_aut
   printf '      %s\n' "→ From an autonomous run, open an issue for a human instead of editing it."
 fi
 
-[ "$drift" -eq 0 ] && printf '  %s✓%s no executor-authored routine edits (live-trigger drift guard)\n' "$G" "$Z"
+[ "$drift" -eq 0 ] && ok "no executor-authored routine edits (live-trigger drift guard)"
 exit "$drift"
