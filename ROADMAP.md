@@ -733,6 +733,50 @@
       Swift touched — `make test`/`make build`/`make probe-build` are unaffected and
       unexercised locally (no Swift toolchain in this executor's own environment, same
       documented limit as every other cycle), left to this PR's GitHub Actions run.
+- [x] ~~Real Swift 6 Sendable/concurrency compiler warnings were going unnoticed because
+      no prior cycle ever read this repo's raw CI build logs, only pass/fail~~ — done,
+      see `docs/done/2026-09-10-sendable-concurrency-warnings.md`. Found via a third
+      re-survey angle this run (after the `scripts/lib/colors.sh` fix, #107, and a
+      second pass that found nothing further, #108): fetched and grepped the actual
+      GitHub Actions build log content for `warning:` — a signal no prior cycle had
+      checked, since `make ci`'s pass/fail conclusion doesn't surface non-fatal
+      compiler warnings at all. Found exactly 4 real warnings across the whole build
+      (`VaultController.swift`, `SafariWebExtensionHandler.swift`) plus 3 unrelated
+      Xcode-tooling `appintentsmetadataprocessor` notices — legitimate Swift 6 strict-
+      concurrency diagnostics about non-`Sendable` types crossing into `@Sendable`
+      closures, not fatal (`make ci` was already green), but real, confirmed-by-
+      inspection hygiene gaps. Fixed two of the four, confirmed by actually re-running
+      this PR's own CI and re-grepping its logs (not assumed from the diff alone —
+      caught and corrected one wrong assumption along the way, see below):
+      `@preconcurrency import AuthenticationServices` in `VaultController.swift` (the
+      exact fix the compiler's own diagnostic note suggested, for the
+      `ASCredentialIdentityStore`/`store` capture — confirmed gone from the rebuilt
+      log) and, in `SafariWebExtensionHandler.swift`, marking the class
+      `@unchecked Sendable` for the `self` capture — confirmed safe by inspection
+      first: every stored instance property is an immutable `let` of an already-
+      `Sendable` type (`VaultService`/`KeychainStore` are `Sendable` structs, `Logger`
+      is `Sendable`), and the only actual mutable state is the `static` cache fields
+      already carrying their own `nonisolated(unsafe)` + `workQueue`-serialization
+      justification from an earlier cycle — also confirmed gone from the rebuilt log.
+      **Two warnings left, deliberately, not silently**: the same closure's capture of
+      `message: [String: Any]` (`Any` can never be proven `Sendable` by the type
+      system, and this payload's shape comes straight from `SFExtensionMessageKey` —
+      Safari's own JS-bridged dictionary — not something changeable without a larger
+      message-type redesign outside this item's scope) and `context:
+      NSExtensionContext`. The latter was initially "fixed" with
+      `@preconcurrency import Foundation`, mirroring the `AuthenticationServices`
+      pattern — but re-checking this PR's own rebuilt CI log after pushing showed the
+      warning was still there. Root cause: that warning comes from `DispatchQueue.
+      async`'s own `@Sendable` closure requirement (declared in the `Dispatch`
+      module), not from an API `Foundation` itself declares, so `@preconcurrency
+      import Foundation` had nothing to suppress — reverted rather than leaving an
+      ineffective, scope-widening import in place. A real fix would mean retroactively
+      declaring Apple's own `NSExtensionContext` `@unchecked Sendable`, which needs
+      stronger evidence of its actual thread-safety than this cycle could confirm — so
+      left as a genuine, documented gap rather than a guessed-at conformance. Net
+      result, confirmed via the actual rebuilt log content: 4 real warnings → 2. No
+      behavior change either way — every change here is a compile-time-only
+      diagnostic annotation, `make ci` stayed green throughout.
 
 ## Needs maintainer/human action (not code)
 
