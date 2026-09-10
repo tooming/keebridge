@@ -1,7 +1,7 @@
 // Copyright (c) 2026 Martin Tooming
 // SPDX-License-Identifier: MIT
 
-@preconcurrency import Foundation
+import Foundation
 import SafariServices
 import KeeBridgeCore
 import os
@@ -14,7 +14,11 @@ import os
 // serialization justification. This silences the compiler's cross-instance
 // Sendable warning for `self` at the `workQueue.async` capture site in
 // `beginRequest`, matching an invariant this file already documents and
-// relies on, not a new one.
+// relies on, not a new one. (`@preconcurrency import Foundation` was tried
+// too, for the same closure's `NSExtensionContext` capture, and confirmed —
+// via this file's own CI run — to do nothing: that warning comes from
+// Dispatch's `@Sendable` closure requirement, not from an API Foundation
+// itself declares, so `@preconcurrency` has nothing to suppress there.)
 final class SafariWebExtensionHandler: NSObject, NSExtensionRequestHandling, @unchecked Sendable {
     private let vaultService = VaultService()
     private let keychain = KeychainStore(service: KeeBridgeConfig.cardExtensionKeychainService)
