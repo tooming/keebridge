@@ -25,6 +25,25 @@
 
 ## Now / next
 
+- [x] ~~`TOTPGenerator.parse`'s `algorithm` parameter silently fell back to SHA1
+      for any unrecognized value instead of rejecting it~~ — done, see
+      `docs/done/2026-09-11-totp-invalid-algorithm-rejection.md`. Found via a
+      fresh, adversarial re-read of `TOTPGenerator.swift` this cycle, with the
+      same lens the earlier digits/period fixes used: `algorithm =
+      HMACAlgorithm(rawValue: ...) ?? .sha1` silently coerced an unrecognized
+      (but PRESENT) `algorithm=` value to SHA1, the exact
+      silent-fallback-on-an-out-of-range-but-present-value shape already fixed
+      for `digits`/`period` in this same file. Unlike those two, this doesn't
+      crash — it silently generates codes against the wrong algorithm for
+      whatever the URI actually specified, so a 2FA code would just mysteriously
+      fail to validate with no indication why. Fixed by rejecting any
+      `algorithm=` value that isn't SHA1/SHA256/SHA512 (still falling back to
+      SHA1 only when the key is absent entirely, matching RFC 6238/Google
+      Authenticator convention). Also closed a related, adjacent coverage gap
+      found alongside it: no existing test ever exercised parsing an EXPLICIT
+      `algorithm=SHA256`/`SHA512` value at all (only the default-to-SHA1 path
+      was tested) — four new `@Test` cases cover explicit SHA256, explicit
+      SHA512, a lowercase algorithm name, and the new rejection.
 - [x] ~~`EntryEditView`'s QR scanner left its sheet open, with a dead camera
       feed, after scanning a QR code that wasn't a valid TOTP setup URI~~ —
       done, see `docs/done/2026-09-11-qr-scanner-invalid-code-sheet-close.md`.

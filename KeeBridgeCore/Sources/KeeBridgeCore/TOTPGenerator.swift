@@ -26,6 +26,7 @@ public enum TOTPError: Error, CustomStringConvertible {
     case unsupportedType(String)
     case missingSecret
     case invalidBase32Secret
+    case invalidAlgorithm(String)
     case invalidDigits(Int)
     case invalidPeriod(TimeInterval)
 
@@ -35,6 +36,8 @@ public enum TOTPError: Error, CustomStringConvertible {
         case .unsupportedType(let type): return "Unsupported otpauth type: \(type) (only \"totp\" is supported)"
         case .missingSecret: return "otpauth URI has no secret parameter"
         case .invalidBase32Secret: return "Could not Base32-decode the secret"
+        case .invalidAlgorithm(let algorithm):
+            return "Unsupported otpauth \"algorithm\": \(algorithm) (only SHA1, SHA256, SHA512 are supported)"
         case .invalidDigits(let digits): return "otpauth \"digits\" must be between 1 and 9, got \(digits)"
         case .invalidPeriod(let period): return "otpauth \"period\" must be a positive, finite number of seconds, got \(period)"
         }
@@ -66,7 +69,19 @@ public enum TOTPGenerator {
             throw TOTPError.invalidBase32Secret
         }
 
-        let algorithm = TOTPParameters.HMACAlgorithm(rawValue: (query["algorithm"] ?? "SHA1").uppercased()) ?? .sha1
+        // Only the "algorithm" key being ABSENT falls back to the RFC 6238/Google
+        // Authenticator default (SHA1) — a key that IS present but names something
+        // other than SHA1/SHA256/SHA512 must throw, not silently coerce to SHA1 via
+        // `?? .sha1`. That silent-fallback-on-an-out-of-range-but-present-value shape
+        // is exactly the bug class `digits`/`period` above were already fixed for
+        // (`?? 6`/`?? 30` silently swallowing an out-of-range value instead of
+        // rejecting it) — here it wouldn't crash, but it would silently generate
+        // codes against the WRONG algorithm for whatever the URI actually specified,
+        // which fails 2FA in a way that gives the user no indication why.
+        let algorithmRaw = (query["algorithm"] ?? "SHA1").uppercased()
+        guard let algorithm = TOTPParameters.HMACAlgorithm(rawValue: algorithmRaw) else {
+            throw TOTPError.invalidAlgorithm(algorithmRaw)
+        }
 
         let digits = Int(query["digits"] ?? "") ?? 6
         // 9 is the largest digit count whose modulus (10^digits) still fits in the
