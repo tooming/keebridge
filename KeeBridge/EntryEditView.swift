@@ -73,25 +73,40 @@ struct EntryEditView: View {
         .frame(width: 380)
         .onAppear { loadIfEditing() }
         .sheet(isPresented: $showingQRScanner) {
-            QRCodeScannerView { code in
-                // Close the sheet on EITHER outcome, not just success.
-                // `metadataOutput` already stops the capture session (and marks
-                // `didScan`) the instant it recognizes any QR code, valid or
-                // not, before this closure gets a chance to validate it — so
-                // by the time an invalid code reaches here, the camera feed is
-                // already dead. Leaving the sheet open in that case stranded
-                // the user looking at a frozen, black preview with the error
-                // alert on top and no way to retry short of Escape/
-                // click-outside (there's no Cancel button in this sheet):
-                // dismissing here matches the success path and lets them just
-                // click "Scan QR Code…" again for a fresh camera session.
-                showingQRScanner = false
-                guard (try? TOTPGenerator.parse(otpauthURI: code)) != nil else {
-                    otpError = "The QR code does not contain a valid TOTP setup URI."
-                    return
+            QRCodeScannerView(
+                onCode: { code in
+                    // Close the sheet on EITHER outcome, not just success.
+                    // `metadataOutput` already stops the capture session (and marks
+                    // `didScan`) the instant it recognizes any QR code, valid or
+                    // not, before this closure gets a chance to validate it — so
+                    // by the time an invalid code reaches here, the camera feed is
+                    // already dead. Leaving the sheet open in that case stranded
+                    // the user looking at a frozen, black preview with the error
+                    // alert on top and no way to retry short of Escape/
+                    // click-outside (there's no Cancel button in this sheet):
+                    // dismissing here matches the success path and lets them just
+                    // click "Scan QR Code…" again for a fresh camera session.
+                    showingQRScanner = false
+                    guard (try? TOTPGenerator.parse(otpauthURI: code)) != nil else {
+                        otpError = "The QR code does not contain a valid TOTP setup URI."
+                        return
+                    }
+                    otpURI = code
+                },
+                onFailure: { message in
+                    // Same dead-end shape as the invalid-QR-code case above, one
+                    // level earlier: camera permission denied, no camera present,
+                    // or session setup failing all used to hit a silent `return`
+                    // inside `configureCamera()` — the sheet stayed open showing
+                    // a permanently blank preview with zero explanation and (still)
+                    // no Cancel button, so the only way out was guessing to press
+                    // Escape or click outside. Surfacing the failure here closes
+                    // the sheet and explains why, the same way an invalid scan
+                    // already does.
+                    showingQRScanner = false
+                    otpError = message
                 }
-                otpURI = code
-            }
+            )
         }
         .alert("Unable to Add One-Time Password", isPresented: Binding(
             get: { otpError != nil },
@@ -142,18 +157,20 @@ struct EntryEditView: View {
 
 private struct QRCodeScannerView: View {
     var onCode: (String) -> Void
+    var onFailure: (String) -> Void
 
     var body: some View {
-        QRCodeCameraView(onCode: onCode)
+        QRCodeCameraView(onCode: onCode, onFailure: onFailure)
             .frame(width: 480, height: 360)
     }
 }
 
 private struct QRCodeCameraView: NSViewRepresentable {
     var onCode: (String) -> Void
+    var onFailure: (String) -> Void
 
     func makeNSView(context: Context) -> QRCodeCameraPreview {
-        QRCodeCameraPreview(onCode: onCode)
+        QRCodeCameraPreview(onCode: onCode, onFailure: onFailure)
     }
 
     func updateNSView(_ nsView: QRCodeCameraPreview, context: Context) {}
@@ -174,10 +191,12 @@ private struct QRCodeCameraView: NSViewRepresentable {
 private final class QRCodeCameraPreview: NSView, @MainActor AVCaptureMetadataOutputObjectsDelegate {
     private let session = AVCaptureSession()
     private let onCode: (String) -> Void
+    private let onFailure: (String) -> Void
     private var didScan = false
 
-    init(onCode: @escaping (String) -> Void) {
+    init(onCode: @escaping (String) -> Void, onFailure: @escaping (String) -> Void) {
         self.onCode = onCode
+        self.onFailure = onFailure
         super.init(frame: .zero)
         wantsLayer = true
         configureCamera()
@@ -192,21 +211,40 @@ private final class QRCodeCameraPreview: NSView, @MainActor AVCaptureMetadataOut
         layer?.sublayers?.compactMap { $0 as? AVCaptureVideoPreviewLayer }.forEach { $0.frame = bounds }
     }
 
+    // Every failure branch below used to just `return`, leaving `EntryEditView`'s
+    // sheet open on a permanently blank preview with no explanation and no Cancel
+    // button — see `EntryEditView.body`'s `onFailure` doc comment for the fix this
+    // closure enables. `didScan` guards against calling `onFailure` after a scan
+    // already succeeded (shouldn't be reachable — nothing here runs again once
+    // `stopSession()` has been called — but cheap insurance against ever firing
+    // both callbacks for one sheet).
     private func configureCamera() {
         AVCaptureDevice.requestAccess(for: .video) { [weak self] granted in
             DispatchQueue.main.async {
-                guard granted, let self, let device = AVCaptureDevice.default(for: .video),
-                      let input = try? AVCaptureDeviceInput(device: device)
-                else { return }
+                guard let self, !self.didScan else { return }
+                guard granted else {
+                    self.onFailure("Camera access is required to scan a QR code. Enable it in System Settings > Privacy & Security > Camera.")
+                    return
+                }
+                guard let device = AVCaptureDevice.default(for: .video) else {
+                    self.onFailure("No camera is available on this Mac.")
+                    return
+                }
+                guard let input = try? AVCaptureDeviceInput(device: device) else {
+                    self.onFailure("Could not access the camera.")
+                    return
+                }
                 self.session.beginConfiguration()
                 guard self.session.canAddInput(input) else {
                     self.session.commitConfiguration()
+                    self.onFailure("Could not use the camera for scanning.")
                     return
                 }
                 self.session.addInput(input)
                 let output = AVCaptureMetadataOutput()
                 guard self.session.canAddOutput(output) else {
                     self.session.commitConfiguration()
+                    self.onFailure("Could not use the camera for scanning.")
                     return
                 }
                 self.session.addOutput(output)
