@@ -25,6 +25,26 @@
 
 ## Now / next
 
+- [x] ~~`VaultController.lock()` had no guard against an unlock/refresh/write
+      already in flight — its completion could run afterward and silently
+      re-unlock the app~~ — done, see
+      `docs/done/2026-09-11-vaultcontroller-lock-race-fix.md`. Found via a
+      full read of `VaultController.swift` (not yet read this run): tapping
+      "Lock" while a background `refreshFromCache()` was in flight (e.g. the
+      throttled auto-refresh that fires on every window activation) let that
+      refresh's completion run anyway and unconditionally set
+      `isUnlocked = true` plus repopulate `cachedContent`/`entries` —
+      silently reverting the user's own Lock action with no new
+      authentication. `createEntry`/`updateEntry`/`deleteEntry` had the same
+      shape minus the `isUnlocked` flip: their late completions quietly
+      restored the decrypted vault content in memory (exactly what `lock()`
+      promises to purge) even while the UI kept showing the locked screen.
+      Fixed with a `generation` counter bumped by `lock()`: each of the five
+      call sites checks it in its completion before applying any state, so a
+      `lock()` mid-flight makes a late completion a no-op for
+      `isUnlocked`/`cachedContent`/`entries` while still always clearing
+      `isWorking` (so `lock()` itself can never get the controller stuck).
+      The on-disk write for create/update/delete is unaffected either way.
 - [x] ~~The 2026-09-10 backfill doc that found "a `docs/done/*.md` file with no
       `ROADMAP.md` line" had exactly that gap itself~~ — done, see
       `docs/done/2026-09-11-roadmap-done-docs-backfill-self-reference.md`.

@@ -44,6 +44,24 @@ final class VaultController: ObservableObject {
     private var vaultURL: URL?
     private var isWorking = false
 
+    /// Bumped by `lock()`. Every unlock/refresh/create/update/delete
+    /// completion captures this value before starting its background work
+    /// and re-checks it against the current value before applying any
+    /// result — if `lock()` ran in the meantime, the completion still
+    /// clears `isWorking` but discards everything else (the fresh
+    /// `isUnlocked`/`cachedContent`/`entries`/identity-store update it
+    /// would otherwise have applied). Without this, a background refresh
+    /// or write already in flight when the user taps "Lock" — the
+    /// `didBecomeActive`-triggered auto-refresh in particular, which fires
+    /// on every window activation — completes afterward and silently
+    /// resurrects the unlocked view with the decrypted vault content still
+    /// showing, with no new authentication: `lock()`'s own doc comment
+    /// below promises this clears in-memory unlock state, but a late
+    /// completion undid exactly that. The actual on-disk write (for
+    /// create/update/delete) is unaffected either way — this only gates
+    /// what gets reflected back into this object's own `@Published` state.
+    private var generation = 0
+
     // In-memory only, for this process's lifetime — never persisted.
     // Without this, every refreshFromCache() (which fires on every window
     // activation, potentially frequently) hit Keychain fresh and
@@ -126,6 +144,7 @@ final class VaultController: ObservableObject {
         }
         isWorking = true
         statusMessage = "Unlocking…"
+        let startGeneration = generation
 
         log.notice("unlock: starting Argon2id verify on background task")
         Task.detached(priority: .userInitiated) { [vaultService, keychain, log] in
@@ -140,6 +159,10 @@ final class VaultController: ObservableObject {
                 await MainActor.run { [weak self] in
                     guard let self else { return }
                     self.isWorking = false
+                    guard self.generation == startGeneration else {
+                        self.log.notice("unlock: discarding result — locked again while unlocking")
+                        return
+                    }
                     self.isUnlocked = true
                     self.lastError = nil
                     self.cachedPreHash = preHash
@@ -191,6 +214,7 @@ final class VaultController: ObservableObject {
     }
 
     private func refresh(vaultURL: URL, preHash: Data) {
+        let startGeneration = generation
         Task.detached(priority: .userInitiated) { [vaultService] in
             do {
                 // Re-read the real (Google-Drive-synced) source and
@@ -206,6 +230,7 @@ final class VaultController: ObservableObject {
                 await MainActor.run { [weak self] in
                     guard let self else { return }
                     self.isWorking = false
+                    guard self.generation == startGeneration else { return }
                     self.isUnlocked = true
                     self.cachedContent = content
                     self.entries = entries
@@ -233,6 +258,7 @@ final class VaultController: ObservableObject {
     /// vault file or the extension's mirror; purely a UI-state reset so the
     /// browser closes and the locked screen shows again.
     func lock() {
+        generation += 1
         isUnlocked = false
         entries = []
         cachedPreHash = nil
@@ -282,6 +308,7 @@ final class VaultController: ObservableObject {
     func createEntry(_ draft: VaultService.EntryDraft) {
         guard let vaultURL, let preHash = cachedPreHash, !isWorking else { return }
         isWorking = true
+        let startGeneration = generation
         Task.detached(priority: .userInitiated) { [vaultService] in
             do {
                 // Write path unchanged on purpose (see the v3 plan): fresh
@@ -300,6 +327,7 @@ final class VaultController: ObservableObject {
                 await MainActor.run { [weak self] in
                     guard let self else { return }
                     self.isWorking = false
+                    guard self.generation == startGeneration else { return }
                     self.cachedContent = content
                     self.entries = entries
                     self.lastRefreshDate = Date()
@@ -317,6 +345,7 @@ final class VaultController: ObservableObject {
     func updateEntry(uuid: String, applying draft: VaultService.EntryDraft) {
         guard let vaultURL, let preHash = cachedPreHash, !isWorking else { return }
         isWorking = true
+        let startGeneration = generation
         Task.detached(priority: .userInitiated) { [vaultService] in
             do {
                 try vaultService.updateEntry(uuid: uuid, applying: draft, at: vaultURL, rawKeyData: preHash)
@@ -326,6 +355,7 @@ final class VaultController: ObservableObject {
                 await MainActor.run { [weak self] in
                     guard let self else { return }
                     self.isWorking = false
+                    guard self.generation == startGeneration else { return }
                     self.cachedContent = content
                     self.entries = entries
                     self.lastRefreshDate = Date()
@@ -343,6 +373,7 @@ final class VaultController: ObservableObject {
     func deleteEntry(uuid: String) {
         guard let vaultURL, let preHash = cachedPreHash, !isWorking else { return }
         isWorking = true
+        let startGeneration = generation
         Task.detached(priority: .userInitiated) { [vaultService] in
             do {
                 try vaultService.deleteEntry(uuid: uuid, at: vaultURL, rawKeyData: preHash)
@@ -352,6 +383,7 @@ final class VaultController: ObservableObject {
                 await MainActor.run { [weak self] in
                     guard let self else { return }
                     self.isWorking = false
+                    guard self.generation == startGeneration else { return }
                     self.cachedContent = content
                     self.entries = entries
                     self.lastRefreshDate = Date()
