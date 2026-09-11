@@ -382,7 +382,7 @@ final class CredentialProviderViewController: ASCredentialProviderViewController
         }
         guard vaultURL != nil else {
             log.error("no vault mirror found at \(KeeBridgeConfig.vaultMirrorURLForExtension().path) — telling user to open KeeBridge first")
-            showMessage("Open KeeBridge on this Mac and pick your vault.kdbx first.")
+            showNoVaultMirrorMessage()
             return
         }
 
@@ -421,7 +421,7 @@ final class CredentialProviderViewController: ASCredentialProviderViewController
     private func openContentThenProceed(preHash: Data) {
         guard let vaultURL else {
             isWorking = false
-            showMessage("Open KeeBridge on this Mac and pick your vault.kdbx first.")
+            showNoVaultMirrorMessage()
             return
         }
         workQueue.async { [weak self] in
@@ -899,9 +899,51 @@ final class CredentialProviderViewController: ASCredentialProviderViewController
         embed(Text(text).padding().frame(minWidth: 300))
     }
 
+    /// Shown when `vaultURL` is nil — no vault mirror exists yet at
+    /// `KeeBridgeConfig.vaultMirrorURLForExtension()` (first-ever use before
+    /// the app has mirrored a vault into this extension's container, or the
+    /// mirror was deleted). NOT a dead-end `showMessage(...)`: this sheet can
+    /// stay open while the user switches to the main KeeBridge app, picks/
+    /// unlocks their vault.kdbx (which mirrors it into this container), then
+    /// switches back to Safari — "Try Again" re-runs `showUnlockOrProceed()`,
+    /// which re-checks `vaultURL` (a computed property backed by a live
+    /// `FileManager.fileExists` check, not a stale snapshot) fresh. Before
+    /// this fix, the only way forward from this exact message was Escape,
+    /// abandoning the whole autofill request even after fixing the root
+    /// cause in the main app — same class of bug `showUnlockPrompt`'s own
+    /// doc comment already describes fixing for the wrong-master-password
+    /// case; this closes the other dead end sharing the same `showMessage`
+    /// helper.
+    private func showNoVaultMirrorMessage() {
+        log.notice("showing no-vault-mirror message with retry")
+        embed(NoVaultMirrorView { [weak self] in
+            self?.showUnlockOrProceed()
+        })
+    }
+
     private func handleEscape() {
         log.notice("⎋ Escape pressed — cancelling")
         respondCancel(.userCanceled)
+    }
+}
+
+/// See `CredentialProviderViewController.showNoVaultMirrorMessage`'s doc
+/// comment: retry-capable in place of a dead-end static message.
+private struct NoVaultMirrorView: View {
+    let onTryAgain: () -> Void
+
+    var body: some View {
+        VStack(spacing: 12) {
+            Text("No vault found").bold()
+            Text("Open KeeBridge on this Mac and pick your vault.kdbx first.")
+                .font(.callout)
+                .multilineTextAlignment(.center)
+                .foregroundStyle(.secondary)
+            Button("Try Again", action: onTryAgain)
+                .keyboardShortcut(.defaultAction)
+        }
+        .padding()
+        .frame(minWidth: 320)
     }
 }
 
