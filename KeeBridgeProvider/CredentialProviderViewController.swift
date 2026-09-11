@@ -443,9 +443,16 @@ final class CredentialProviderViewController: ASCredentialProviderViewController
         }
     }
 
-    private func showUnlockPrompt() {
-        log.notice("no cached Keychain item — showing own unlock prompt (first use on this device)")
-        embed(UnlockView { [weak self] password in
+    /// Shows the master-password prompt. `errorMessage`, when non-nil, is a
+    /// prior attempt's failure (wrong password, or a Keychain-store failure
+    /// after a correct one) shown alongside a fresh, empty password field —
+    /// not a dead-end `showMessage(...)` the user could only escape by
+    /// cancelling this whole autofill request and reopening it from
+    /// scratch. `handleUnlock`'s own two failure paths are exactly why this
+    /// parameter exists; see their call sites.
+    private func showUnlockPrompt(errorMessage: String? = nil) {
+        log.notice("showing unlock prompt (first use on this device, or retrying after: \(errorMessage ?? "n/a", privacy: .public))")
+        embed(UnlockView(errorMessage: errorMessage) { [weak self] password in
             self?.handleUnlock(password: password)
         })
     }
@@ -481,14 +488,26 @@ final class CredentialProviderViewController: ASCredentialProviderViewController
                     } catch {
                         self.isWorking = false
                         self.log.error("handleUnlock: Keychain store failed: \(String(describing: error))")
-                        self.showMessage("Couldn't cache unlock: \(error)")
+                        // Re-show the password prompt rather than a dead-end
+                        // message — see showUnlockPrompt's doc comment.
+                        // The password itself DID verify here; retrying just
+                        // repeats the Argon2id pass, which is a fine
+                        // trade-off against dead-ending the whole request.
+                        self.showUnlockPrompt(errorMessage: "Couldn't cache unlock: \(error)")
                     }
                 }
             } catch {
                 self.log.error("handleUnlock: Argon2id verify failed (wrong password?): \(String(describing: error))")
                 DispatchQueue.main.async {
                     self.isWorking = false
-                    self.showMessage("Couldn't unlock: \(error)")
+                    // Re-show the password prompt rather than a dead-end
+                    // message. Before this fix, a mistyped master password —
+                    // the single most common failure mode of this exact
+                    // screen — left the user looking at static, non-
+                    // interactive error text with no way to retry short of
+                    // cancelling this whole autofill request (Escape) and
+                    // re-triggering it from Safari from scratch.
+                    self.showUnlockPrompt(errorMessage: "Couldn't unlock: \(error)")
                 }
             }
         }
@@ -887,12 +906,23 @@ final class CredentialProviderViewController: ASCredentialProviderViewController
 }
 
 private struct UnlockView: View {
+    /// A prior attempt's failure, shown above the (always empty, never
+    /// pre-filled with the rejected attempt) password field — see
+    /// `CredentialProviderViewController.showUnlockPrompt`'s doc comment
+    /// for why this exists instead of a dead-end message screen.
+    var errorMessage: String? = nil
     let onSubmit: (String) -> Void
     @State private var password: String = ""
 
     var body: some View {
         VStack(spacing: 12) {
             Text("Unlock KeeBridge").bold()
+            if let errorMessage {
+                Text(errorMessage)
+                    .font(.callout)
+                    .foregroundStyle(.red)
+                    .multilineTextAlignment(.center)
+            }
             SecureField("Master password", text: $password)
                 .textFieldStyle(.roundedBorder)
                 .onSubmit { onSubmit(password) }

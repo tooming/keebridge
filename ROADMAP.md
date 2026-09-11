@@ -25,6 +25,32 @@
 
 ## Now / next
 
+- [x] ~~`CredentialProviderViewController`'s unlock prompt dead-ended after a
+      wrong master password, with no way to retry~~ — done, see
+      `docs/done/2026-09-11-provider-unlock-retry.md`. Found via a fresh,
+      full adversarial read of `CredentialProviderViewController.swift` (952
+      lines) this cycle — first full read applying this run's
+      control-flow-ordering lens to this specific file. Real, reachable gap
+      (mistyping a master password is the single most common failure mode of
+      this exact screen, not an edge case): `handleUnlock`'s two failure
+      paths (`Argon2id`/password verification failing, and a Keychain-store
+      failure after a correct password) both called `showMessage(...)`,
+      which embeds a plain, non-interactive `Text` view with no password
+      field and no retry button — the only way out was pressing Escape
+      (cancelling the entire autofill request) and re-triggering it from
+      Safari from scratch. Fixed: both paths now re-show the unlock prompt
+      itself (a new `errorMessage` parameter on `showUnlockPrompt`/
+      `UnlockView`, displayed above a fresh, empty password field) instead of
+      a dead end, so a mistyped password is a one-click retry, same as any
+      comparable credential manager's unlock screen. No new secret exposure —
+      the error text shown is the exact same `error` value `showMessage`
+      already displayed before this fix, just now alongside a way to retry
+      instead of a dead end. Compiled-only (`xcodebuild`) — this extension
+      has no test target for its `NSViewController`/SwiftUI layer, same as
+      every other `CredentialProviderViewController.swift` change in this
+      ROADMAP. Still needs a human eyeball: confirming the retry flow
+      actually feels right in a real Safari autofill popover — this
+      executor has no GUI.
 - [x] ~~`TOTPGenerator.parse`'s `algorithm` parameter silently fell back to SHA1
       for any unrecognized value instead of rejecting it~~ — done, see
       `docs/done/2026-09-11-totp-invalid-algorithm-rejection.md`. Found via a
