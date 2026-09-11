@@ -354,6 +354,14 @@ public struct VaultService: Sendable {
     /// independently-created databases. Returns the number of entries
     /// actually merged (0, the common case, means nothing to do — no
     /// write happens at all when nothing merged).
+    ///
+    /// Snapshots each merged entry's pre-merge state into `entry.history`
+    /// first, same as `setPasskey` (which this mirrors) and `updateEntry` —
+    /// `!sourceAlreadyMatches` below only skips a merge when the source
+    /// already has this EXACT mirror credential; a source entry whose
+    /// passkey differs from the mirror's still gets overwritten here, and
+    /// without a snapshot that prior passkey would be destroyed with no
+    /// recovery path at all.
     public func mergeExtensionOriginatedPasskeys(
         fromMirrorAt mirrorURL: URL, intoSourceAt sourceURL: URL, rawKeyData: Data
     ) throws -> Int {
@@ -377,6 +385,7 @@ public struct VaultService: Sendable {
     ) throws -> Int {
         let mirrorContent = try openContent(at: mirrorURL, unlock: unlock)
         var sourceContent = try openContent(at: sourceURL, unlock: unlock)
+        let historyMaxItems = sourceContent.database.meta.historyMaxItems
 
         var mergedCount = 0
         func walk(_ group: KDBX.Group) {
@@ -391,6 +400,11 @@ public struct VaultService: Sendable {
                 else { continue }
 
                 let found = Self.mutateEntry(in: &sourceContent.database.root.group, uuid: uuid) { sourceEntry in
+                    var snapshot = sourceEntry
+                    snapshot.history = []
+                    sourceEntry.history.append(snapshot)
+                    Self.trimHistory(&sourceEntry, maxItems: historyMaxItems)
+
                     sourceEntry.setPasskeyRelyingParty(relyingParty)
                     sourceEntry.setPasskeyCredentialID(credentialID)
                     sourceEntry.setPasskeyPrivateKeyPEM(privateKeyPEM)
@@ -586,8 +600,19 @@ public struct VaultService: Sendable {
     /// other field on the entry (title, username, password, URL, notes,
     /// custom fields) is left untouched — this only ever touches the five
     /// `KPEX_PASSKEY_*` fields, unlike `updateEntry`'s full-replace
-    /// semantics. Throws `.entryNotFound` if no entry with that UUID
-    /// exists anywhere in the tree.
+    /// semantics. Snapshots the pre-call state into `entry.history` first
+    /// (trimmed against `Meta.historyMaxItems`), same as `updateEntry` —
+    /// this is exactly the "set" `KDBX.Entry.history`'s own doc comment
+    /// means ("every entry set or equivalent edit prepends a snapshot of
+    /// the prior state here"), and this method's own name says so
+    /// ("overwrites... in place"): calling it again on an entry that
+    /// already has a passkey — re-registering after the private key was
+    /// lost or revoked, the realistic case this "(or overwrites)" already
+    /// anticipates — silently destroyed the OLD credential ID/private key
+    /// with no recovery path at all before this fix, not even via
+    /// KeePassXC's own "View History" the way an `updateEntry` edit's
+    /// prior state already is. Throws `.entryNotFound` if no entry with
+    /// that UUID exists anywhere in the tree.
     public func setPasskey(
         uuid: String,
         relyingParty: String,
@@ -634,7 +659,13 @@ public struct VaultService: Sendable {
         unlock: UnlockData
     ) throws {
         var content = try openContent(at: url, unlock: unlock)
+        let historyMaxItems = content.database.meta.historyMaxItems
         let found = Self.mutateEntry(in: &content.database.root.group, uuid: uuid) { entry in
+            var snapshot = entry
+            snapshot.history = []
+            entry.history.append(snapshot)
+            Self.trimHistory(&entry, maxItems: historyMaxItems)
+
             entry.setPasskeyRelyingParty(relyingParty)
             entry.setPasskeyCredentialID(credentialID)
             entry.setPasskeyPrivateKeyPEM(privateKeyPEM)

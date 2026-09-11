@@ -25,6 +25,25 @@
 
 ## Now / next
 
+- [x] ~~`setPasskey` and the extension-merge path never populated
+      `entry.history`, unlike `updateEntry` after its own 2026-09-05
+      fix~~ — done, see
+      `docs/done/2026-09-11-setpasskey-history-preservation.md`. Found via
+      a full read of `VaultService.swift` (not yet read this run):
+      `setPasskey`'s own doc comment says "sets (or overwrites)" — but
+      re-registering a passkey on an entry that already has one destroyed
+      the OLD credential ID/private key with no history snapshot and no
+      recovery path at all, the exact KDBXKit contract
+      ("every entry set or equivalent edit prepends a snapshot of the
+      prior state") the 2026-09-05 fix established for `updateEntry` but
+      never extended to this file's other two entry-mutating write
+      paths. The merge function inside `mergeExtensionOriginatedPasskeys`
+      had the identical gap — its `!sourceAlreadyMatches` guard only
+      skips a merge when source already has the exact mirror credential,
+      so a source entry with a *different* existing passkey still got
+      silently overwritten. Fixed with the same snapshot-then-trim
+      pattern `updateEntry` already uses, in both places. Two new
+      `@Test` cases in `PasskeyTests.swift`, run via `swift test`/CI.
 - [x] ~~`VaultController.lock()` had no guard against an unlock/refresh/write
       already in flight — its completion could run afterward and silently
       re-unlock the app~~ — done, see
