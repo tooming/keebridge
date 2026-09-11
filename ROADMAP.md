@@ -25,6 +25,31 @@
 
 ## Now / next
 
+- [x] ~~`CredentialProviderViewController`'s "no vault mirror found" message
+      dead-ended with no way to retry~~ — done, see
+      `docs/done/2026-09-11-provider-no-vault-retry.md`. Found via a further
+      adversarial pass over `CredentialProviderViewController.swift` this
+      cycle, this time specifically re-checking every `showMessage(...)` call
+      site rather than just the two `handleUnlock` failure paths #116 already
+      fixed — that fix's own doc comment flagged `showMessage` as the shared
+      dead-end helper, but two more call sites (`showUnlockOrProceed` and
+      `openContentThenProceed`, both hit when `vaultURL` is nil — no vault
+      mirror exists yet at first-ever use, or the mirror was deleted) still
+      used it directly. Real, reachable gap on the same first-use path #116's
+      own fix left untouched: with no vault selected in the main app yet, the
+      credential provider showed a static, non-interactive "Open KeeBridge on
+      this Mac and pick your vault.kdbx first." message with no button —
+      Escape (abandoning the whole autofill request) was the only way out,
+      even after fixing the root cause in the main app while this sheet
+      stayed open. Fixed: both call sites now show a retry-capable
+      `NoVaultMirrorView` ("Try Again" button) that re-runs
+      `showUnlockOrProceed()`, which re-checks `vaultURL` — a computed
+      property backed by a live `FileManager.fileExists` check — fresh each
+      time, so it picks up a vault mirrored in after the fact. Compiled-only
+      (`xcodebuild`), same as #116 and every other
+      `CredentialProviderViewController.swift` change in this ROADMAP — no
+      test target for this file's `NSViewController`/SwiftUI layer. Still
+      needs a human eyeball in a real Safari autofill popover.
 - [x] ~~`CredentialProviderViewController`'s unlock prompt dead-ended after a
       wrong master password, with no way to retry~~ — done, see
       `docs/done/2026-09-11-provider-unlock-retry.md`. Found via a fresh,
