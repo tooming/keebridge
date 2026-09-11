@@ -38,6 +38,19 @@ run's self-review-then-merge step never completed — finish it right now (STEP 
 before touching STEP 2. If a stale PR's checks are still red or pending, leave it alone —
 that's a run still in progress, not a stranded one.
 
+STEP 1c — Check CI health on main. Before picking a backlog item, check the latest
+push-triggered run of `ci.yml` on `main`: `gh run list --workflow ci.yml --branch main
+--event push --limit 1 --json status,conclusion,databaseId,url`. If it's still `in_progress`,
+don't block on it — continue to STEP 2. If its `conclusion` is `failure`, that failing run —
+not the next ROADMAP item — is this cycle's top-priority work: pull the failing logs
+(`gh run view <id> --log-failed`), diagnose the break, and drive `main` back to green ahead
+of STEP 3's normal pick. Land the fix through the exact same contract as any other change —
+implement (STEP 4's hard rules still apply), validate with `make ci` (STEP 5), open a PR
+(STEP 6), then self-review and self-merge it (STEP 7) — never a separate or stricter merge
+path just because it's a CI fix. Only if the failure genuinely can't be diagnosed or fixed
+this run, don't leave `main` silently red: fall back to STEP 6b's `[Action needed]` PR
+convention instead, and only then move on to STEP 2's normal backlog picking.
+
 STEP 2 — Avoid duplicating in-flight work. Run `gh pr list --state open`. Any ROADMAP item
 that already has an open `auto/*` PR is taken — skip it.
 
