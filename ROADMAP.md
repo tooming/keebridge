@@ -25,6 +25,29 @@
 
 ## Now / next
 
+- [x] ~~`EntryEditView`'s QR scanner left a blank, unexplained camera preview
+      open when camera permission was denied (or no camera/session setup
+      failed)~~ — done, see `docs/done/2026-09-11-qr-scanner-camera-failure-feedback.md`.
+      Found via a fresh full re-read of `EntryEditView.swift` this cycle, one
+      level earlier than the already-fixed (`docs/done/2026-09-11-qr-scanner-invalid-code-sheet-close.md`)
+      invalid-QR-code dead end: `QRCodeCameraPreview.configureCamera()`'s
+      four failure branches (permission denied, no camera device, couldn't
+      create an input, session couldn't add the input/output) each just
+      `return`ed silently, leaving the scanner sheet open showing a
+      permanently blank preview with zero explanation and no Cancel button —
+      real, reachable on the very first "Scan QR Code…" click for anyone who
+      hasn't already granted Camera access, or on any Mac with no built-in
+      camera. Fixed: threaded an `onFailure(String) -> Void` closure through
+      `QRCodeScannerView`/`QRCodeCameraView`/`QRCodeCameraPreview`, called at
+      each of the four branches with a specific message; `EntryEditView`
+      closes the sheet and shows the existing `otpError` alert, the exact
+      same dismiss-and-explain pattern the invalid-QR-code fix already
+      established for the sibling failure mode in this same file.
+      Compiled-only (`xcodebuild`) — this view has no test target (SwiftUI +
+      `AVCaptureSession`, no headless way to simulate camera permission
+      states). Still needs a human eyeball: confirming the messages read
+      correctly and the sheet actually closes when permission is denied on
+      real hardware — this executor has no camera or GUI.
 - [x] ~~`docs/WAYS-OF-WORKING.md` §0.1 claimed the executor merges via
       `gh pr merge --squash --delete-branch`~~ — done, see
       `docs/done/2026-09-11-ways-of-working-delete-branch-claim.md`. Found via
