@@ -25,6 +25,19 @@
 
 ## Now / next
 
+- [x] ~~The 2026-09-10 backfill doc that found "a `docs/done/*.md` file with no
+      `ROADMAP.md` line" had exactly that gap itself~~ — done, see
+      `docs/done/2026-09-11-roadmap-done-docs-backfill-self-reference.md`.
+      Found this cycle by re-running that same doc's own diff (every
+      `docs/done/*.md` filename against every `docs/done/...md` string
+      `ROADMAP.md` actually contains) as a fresh angle: exactly one gap,
+      `docs/done/2026-09-10-roadmap-done-docs-backfill.md` itself — the PR
+      that added the consolidated backfill entry cited its 8 backfilled files
+      by name but never cited its own write-up. Fixed: added a parenthetical
+      note citing it at the end of that same bullet (not a near-duplicate new
+      entry), matching the bullet's own existing pattern of noting exceptions
+      inline. Re-ran the full citation diff in both directions afterward:
+      zero remaining gaps.
 - [x] ~~`EntryEditView`'s QR scanner left a blank, unexplained camera preview
       open when camera permission was denied (or no camera/session setup
       failed)~~ — done, see `docs/done/2026-09-11-qr-scanner-camera-failure-feedback.md`.
@@ -1012,6 +1025,14 @@
         Confirmed by cloning upstream (not guessed): the pin is 41 commits *ahead*
         of the newest tag (`v1.3.0`), so this is a stale-comment fix, not a
         version-downgrade risk — the pinned revision itself is unchanged.
+
+      (This bullet's own write-up, `docs/done/2026-09-10-roadmap-done-docs-backfill.md`,
+      was itself never cited anywhere in `ROADMAP.md` until this run's thirty-seventh
+      cycle noticed — the exact same gap this bullet exists to describe, recurring on
+      the doc that first found it. Found the same way: diffing `docs/done/*.md`
+      filenames against every path `ROADMAP.md` actually references. Citing it here
+      now, in the one bullet it already belongs to, rather than adding a second
+      near-duplicate entry.)
 
 ## Needs maintainer/human action (not code)
 
