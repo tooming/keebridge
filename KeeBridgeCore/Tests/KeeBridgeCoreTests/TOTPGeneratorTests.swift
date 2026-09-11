@@ -167,3 +167,44 @@ private let rfc6238SHA1Secret = Data("12345678901234567890".utf8)
     let params = try TOTPGenerator.parse(otpauthURI: uri)
     #expect(params.period == 1)
 }
+
+// MARK: - algorithm validation
+//
+// Before this fix, an "algorithm" value that wasn't SHA1/SHA256/SHA512 was silently
+// coerced to SHA1 via `?? .sha1` instead of being rejected — the same
+// silent-fallback-on-an-out-of-range-but-present-value shape the digits/period fixes
+// above already closed for those two parameters. Unlike digits/period this doesn't
+// crash, but it silently generates codes against the wrong algorithm for whatever the
+// URI actually specified, failing 2FA with no indication why. These cases must be
+// rejected at parse() time instead.
+
+@Test func acceptsExplicitSHA256Algorithm() throws {
+    let uri = "otpauth://totp/Example:alice?secret=GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ&algorithm=SHA256"
+    let params = try TOTPGenerator.parse(otpauthURI: uri)
+    #expect(params.algorithm == .sha256)
+}
+
+@Test func acceptsExplicitSHA512Algorithm() throws {
+    let uri = "otpauth://totp/Example:alice?secret=GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ&algorithm=SHA512"
+    let params = try TOTPGenerator.parse(otpauthURI: uri)
+    #expect(params.algorithm == .sha512)
+}
+
+@Test func acceptsLowercaseAlgorithmName() throws {
+    // The comparison uppercases first, so a real-world URI using lowercase
+    // ("sha1", as some non-Google-Authenticator-derived tools emit) still matches
+    // rather than being rejected as "unsupported."
+    let uri = "otpauth://totp/Example:alice?secret=GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ&algorithm=sha256"
+    let params = try TOTPGenerator.parse(otpauthURI: uri)
+    #expect(params.algorithm == .sha256)
+}
+
+@Test func rejectsUnsupportedAlgorithm() {
+    // "MD5" is not one of RFC 6238's three supported HMAC algorithms — must throw,
+    // not silently fall back to SHA1 and generate codes the real service would
+    // reject.
+    let uri = "otpauth://totp/Example:alice?secret=GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ&algorithm=MD5"
+    #expect(throws: TOTPError.self) {
+        try TOTPGenerator.parse(otpauthURI: uri)
+    }
+}
