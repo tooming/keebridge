@@ -15,9 +15,17 @@
    chose the same full-autonomy model as `tooming/k8s-anywhere`* (2026-08-25, explicit
    choice among a "PR-only, no self-merge" vs. "full self-merge" option). Once required CI
    is green and its `[self-review]` comment is posted (`routines/executor.prompt.md` STEP
-   7), the executor merges — `gh pr merge --squash --delete-branch`. Branch protection on
-   `main` is off, so nothing blocks this at the platform level; the CI-green /
-   self-review bar is enforced by agent discipline, same as the sibling repos.
+   7), the executor merges — squash-merge, via whatever GitHub access the running session
+   actually has (a cloud executor run has no `gh` CLI at all; it merges through the GitHub
+   MCP server's tools instead — see this repo's own session instructions). That access has
+   never included a branch-delete step in practice: every executor-merged branch stays on
+   the remote after its squash-merge lands, which is exactly the accumulating clutter
+   `ROADMAP.md`'s "Needs maintainer/human action" section tracks (`#119`) — not a
+   contradiction of this rule, just a gap an earlier version of this doc didn't call out
+   (it named a specific `--delete-branch` invocation no executor run has actually had the
+   means to perform). Branch protection on `main` is off, so nothing blocks the merge
+   itself at the platform level; the CI-green / self-review bar is enforced by agent
+   discipline, same as the sibling repos.
 2. **The repo is the only rulebook the executor obeys.** It sees only what's in git, so
    `README.md`, `ROADMAP.md` (once bootstrapped — see `routines/executor.prompt.md` STEP
    1a), and this doc are the complete set of rules. A governance change takes effect only

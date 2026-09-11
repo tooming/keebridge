@@ -25,6 +25,28 @@
 
 ## Now / next
 
+- [x] ~~`docs/WAYS-OF-WORKING.md` §0.1 claimed the executor merges via
+      `gh pr merge --squash --delete-branch`~~ — done, see
+      `docs/done/2026-09-11-ways-of-working-delete-branch-claim.md`. Found via
+      the same doc-accuracy lens last cycle's fix used, applied to the
+      governance doc that actually authorizes STEP 7's self-merge: this
+      session's own "GitHub Integration" instructions state plainly that a
+      cloud executor run has NO `gh` CLI access at all and merges exclusively
+      through the GitHub MCP server's tools instead — which have no
+      branch-delete capability. Every one of this run's 23 squash-merges (and,
+      per `#119`'s own direct evidence from cycle eight, apparently every
+      executor merge ever) has left its branch on the remote afterward — the
+      exact clutter `#119` already tracks as a "Needs maintainer/human
+      action" item. The connection `#119` hadn't drawn: this doc's own
+      contract text named a specific `--delete-branch` invocation that no
+      executor run actually had the means to perform, rather than describing
+      what merging actually does. Fixed: rewrote the sentence to describe the
+      actual mechanism (squash-merge via whatever access the running session
+      has — MCP tools for a cloud run) and cross-reference `#119` for the
+      resulting branch clutter, instead of asserting a cleanup step that
+      never happens. Doc-only — no executor logic changed by this fix (it
+      couldn't: there is no branch-delete call to add without a GitHub token
+      that can perform one, which is `#119`'s own still-open blocker).
 - [x] ~~`scripts/routines-author-check.sh`'s own header comment claimed this repo
       had no `tests/drift-detectors.bats` bats suite~~ — done, see
       `docs/done/2026-09-11-routines-author-check-stale-comment.md`. Found via a
