@@ -25,6 +25,26 @@
 
 ## Now / next
 
+- [x] ~~`EntryEditView`'s QR scanner left its sheet open, with a dead camera
+      feed, after scanning a QR code that wasn't a valid TOTP setup URI~~ —
+      done, see `docs/done/2026-09-11-qr-scanner-invalid-code-sheet-close.md`.
+      Found via a fresh, adversarial re-read of `EntryEditView.swift` this
+      cycle. Real, reachable gap (any QR code that isn't an `otpauth://` URI
+      triggers it, not a rare edge case): `QRCodeCameraPreview.metadataOutput`
+      stops the capture session and marks `didScan` the instant it recognizes
+      ANY QR code, valid or not, before the outer closure gets a chance to
+      validate it — so by the time an invalid code reached
+      `EntryEditView`'s `onCode` handler, the camera was already dead, but
+      the handler only set `showingQRScanner = false` on the success path,
+      leaving an invalid scan stranded on a frozen, black preview (with the
+      error alert on top) and no explicit way to retry short of
+      Escape/click-outside (this sheet has no Cancel button). Fixed by
+      dismissing the sheet on either outcome, matching the success path, so
+      a rejected scan just closes cleanly and the user can click "Scan QR
+      Code…" again for a fresh camera session. One-line behavioral change
+      (moved `showingQRScanner = false` above the validation guard).
+      Compiled-only (`xcodebuild`) — this SwiftUI/AppKit view has no test
+      target, same as every other app-layer change in this ROADMAP.
 - [x] ~~Add a `bats` test suite for the `routines/` drift-detector scripts~~ — groomed
       last cycle, implemented this cycle once `bats` turned out to be installable in
       this executor's own environment (`apt-get install bats`, Linux — the repo's own
