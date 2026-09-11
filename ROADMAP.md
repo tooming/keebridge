@@ -921,6 +921,29 @@
 
 ## Needs maintainer/human action (not code)
 
+- [ ] `104` remote branches are `--no-merged` against `origin/main` even though
+      their content has already landed via squash-merge — this is not fixable by a
+      code change, and the executor's own token can't do it either (confirmed live
+      this run: `git push origin --delete <branch>` on this run's own just-merged
+      branch returned HTTP 403). Found this run's 8th cycle, checking `git ls-remote`
+      against every branch this run itself merged (6/6 still present remotely,
+      unauto-deleted) — every `auto/*`/`plan/*`/`copilot/*` branch this repo has ever
+      merged via squash accumulates the same way, since squash-merge produces a new
+      commit not reachable from the original branch tip, so `--no-merged` never
+      recognizes it as merged regardless of GitHub's own repo-settings "auto-delete
+      head branches" toggle (which, per this run's direct evidence, either isn't
+      enabled here or doesn't apply to this token's merges). Not a security or
+      correctness issue — every one of these branches' content is already on `main`
+      — but it's real repo clutter that will keep growing by ~1-2 branches per
+      executor cycle indefinitely. Two independent fixes, either needs a human: (1)
+      a repo owner can enable "Automatically delete head branches" in Settings →
+      General → Pull Requests, which would apply to all FUTURE merges (this run's
+      own past branches would still need a one-time bulk cleanup), or (2) explicitly
+      authorize a future executor run to bulk-delete every branch confirmed merged
+      by content (not just by git ancestry) — this executor deliberately did NOT do
+      that unprompted this cycle, since mass-deleting ~100 refs is exactly the kind
+      of hard-to-reverse, outward-facing action that needs the maintainer's
+      go-ahead first, not the executor's own judgment call.
 - [ ] Confirm whether `routines.yaml`'s `allowed_tools` actually gates the MCP tool
       surface a scheduled executor run receives (#77). Found this cycle, re-surveying
       `routines/` for the first time since it was written: `routines/README.md` and
