@@ -49,17 +49,18 @@
 #
 # Mirrors the readme-check / roadmap-check / routines-check drift-guard pattern from
 # the sibling repos (tooming/k8s-anywhere, toomingsolutions/easysportstream): a
-# scripts/<thing>-check.sh + `make routines-author-check` in `make ci`. Unlike those
-# siblings, this repo has NO `tests/drift-detectors.bats` (or any bats suite) --
-# checked 2026-09-08, confirmed by grep across the whole repo and the CI workflow,
-# neither has ever referenced one despite this comment (copied from a sibling repo
-# without adjusting for this) previously claiming otherwise. The ROUTINES_AUTHOR_ROOT/
-# _BRANCH/_FILES/_IS_CLOUD environment-variable seams below exist specifically to make
-# this script fixture-testable without real git history -- see ROADMAP.md's "Now / next"
-# for the groomed-but-not-yet-implemented item to actually build that suite. This script
-# IS still exercised for real: `make routines-author-check` runs it against the actual
-# repo state, in the GitHub Actions drift job (the real gate on a pushed auto/* PR — see
-# .github/workflows/ci.yml) — just not via dedicated fixture-based unit tests yet.
+# scripts/<thing>-check.sh + `make routines-author-check` in `make ci`. The
+# ROUTINES_AUTHOR_ROOT/_BRANCH/_FILES/_IS_CLOUD environment-variable seams below exist
+# specifically to make this script fixture-testable without real git history --
+# `tests/drift-detectors.bats` (added 2026-09-08, see docs/done/2026-09-08-routines-bats-suite.md)
+# now exercises every branch of this logic through exactly those seams (the
+# "routines-author-check: ..." cases), same as this repo's siblings. This script is
+# ALSO still exercised for real on top of that: `make routines-author-check` runs it
+# against the actual repo state, in the GitHub Actions drift job (the real gate on a
+# pushed auto/* PR — see .github/workflows/ci.yml, which wires in `make routines-bats-test`
+# too). (An earlier version of this comment claimed no such bats suite existed at all --
+# that was accurate as of 2026-09-08's morning check, but went stale the same day once
+# #93/#94 landed; corrected here.)
 #
 # Exit 0 = clean; 1 = an executor-authored change touched routines.yaml.
 #

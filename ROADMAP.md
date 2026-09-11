@@ -25,6 +25,30 @@
 
 ## Now / next
 
+- [x] ~~`scripts/routines-author-check.sh`'s own header comment claimed this repo
+      had no `tests/drift-detectors.bats` bats suite~~ — done, see
+      `docs/done/2026-09-11-routines-author-check-stale-comment.md`. Found via a
+      fresh angle this cycle: reading the three `scripts/routines-*.sh` drift
+      detectors themselves (their logic had only ever been exercised through
+      `bats`'s output and their own tests, never read line-by-line this run). The
+      comment (lines 50-62) stated, as of "checked 2026-09-08", that the repo had
+      "NO `tests/drift-detectors.bats` (or any bats suite)" and pointed at
+      `ROADMAP.md`'s "Now / next" for a "groomed-but-not-yet-implemented item to
+      actually build that suite" — but that suite was added the SAME DAY (`#93`/
+      `#94`, see `docs/done/2026-09-08-routines-bats-suite.md`), is wired into
+      both the `Makefile` (`make routines-bats-test`) and `.github/workflows/ci.yml`,
+      and is exactly the suite this executor has run every single cycle of this
+      run via `bats tests/drift-detectors.bats`. `ROADMAP.md` itself was already
+      correctly updated (marks the bats-suite item done); only this script's own
+      internal comment was stale — a real, confirmed inaccuracy (not a
+      near-miss): anyone reading this script for context would be told a
+      fixture-based test suite for it doesn't exist, when one does and already
+      covers every branch of its logic. Fixed: rewrote the comment to describe
+      the suite's actual existence/coverage, with a note on how it went stale
+      (accurate when written, outdated by the same day's later commits).
+      Comment-only — no logic change; all three local checks
+      (`routines-check.sh`/`routines-author-check.sh`/`bats
+      tests/drift-detectors.bats`) still pass identically before and after.
 - [x] ~~`CredentialProviderViewController`'s "no vault mirror found" message
       dead-ended with no way to retry~~ — done, see
       `docs/done/2026-09-11-provider-no-vault-retry.md`. Found via a further
