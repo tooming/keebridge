@@ -74,12 +74,23 @@ struct EntryEditView: View {
         .onAppear { loadIfEditing() }
         .sheet(isPresented: $showingQRScanner) {
             QRCodeScannerView { code in
+                // Close the sheet on EITHER outcome, not just success.
+                // `metadataOutput` already stops the capture session (and marks
+                // `didScan`) the instant it recognizes any QR code, valid or
+                // not, before this closure gets a chance to validate it — so
+                // by the time an invalid code reaches here, the camera feed is
+                // already dead. Leaving the sheet open in that case stranded
+                // the user looking at a frozen, black preview with the error
+                // alert on top and no way to retry short of Escape/
+                // click-outside (there's no Cancel button in this sheet):
+                // dismissing here matches the success path and lets them just
+                // click "Scan QR Code…" again for a fresh camera session.
+                showingQRScanner = false
                 guard (try? TOTPGenerator.parse(otpauthURI: code)) != nil else {
                     otpError = "The QR code does not contain a valid TOTP setup URI."
                     return
                 }
                 otpURI = code
-                showingQRScanner = false
             }
         }
         .alert("Unable to Add One-Time Password", isPresented: Binding(
