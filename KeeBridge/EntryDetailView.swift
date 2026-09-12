@@ -125,8 +125,19 @@ struct EntryDetailView: View {
             }
         }
         .onAppear { reveal() }
+        // `updateEntry` (like createEntry/deleteEntry) writes to the vault
+        // and refreshes `cachedContent`/`entries` asynchronously — its
+        // completion lands well after `EntryEditView.save()`'s `onSave()`
+        // call returns, so reveal()-ing there (the previous approach) read
+        // `cachedContent` before the save had actually landed in it, always
+        // showing the PRE-edit password/notes, indefinitely (nothing else
+        // ever re-triggered a re-reveal for the same open entry). Reacting
+        // to `lastRefreshDate` instead — set in the same MainActor-hopped
+        // completion that updates `cachedContent` — re-reveals only once
+        // the new content is actually in place.
+        .onChange(of: controller.lastRefreshDate) { reveal() }
         .sheet(isPresented: $showingEdit) {
-            EntryEditView(controller: controller, mode: .edit(entry.uuid), onSave: reveal)
+            EntryEditView(controller: controller, mode: .edit(entry.uuid), onSave: {})
         }
         .confirmationDialog(
             "Delete \"\(entry.title)\"?",

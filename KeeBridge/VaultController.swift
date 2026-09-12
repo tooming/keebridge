@@ -704,7 +704,12 @@ final class VaultController: ObservableObject {
         }
     }
 
-    private var lastRefreshDate: Date?
+    // Not `private`: `EntryDetailView` reads this to know when to re-derive
+    // its revealed fields from freshly-refreshed content — see that file's
+    // own `.onChange(of:)` for why (createEntry/updateEntry/deleteEntry all
+    // update this alongside `cachedContent`/`entries`, inside the same
+    // MainActor-hopped completion, once the actual write has landed).
+    var lastRefreshDate: Date?
     // didBecomeActiveNotification turned out to fire on internal focus
     // changes too — not just switching back from another app, but opening/
     // interacting with KeeBridge's own sheets (confirmed via the log:
