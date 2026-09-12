@@ -25,6 +25,36 @@
 
 ## Now / next
 
+- [x] ~~`EntryDetailView` re-revealed a saved entry's password/notes too
+      early — before the async `updateEntry` write had actually landed —
+      so it showed the stale, PRE-edit values indefinitely after every
+      edit~~ — done, see
+      `docs/done/2026-09-12-entry-detail-post-edit-stale-reveal-fix.md`.
+      Found via a full, fresh read of `EntryDetailView.swift` this cycle
+      cross-checked against `VaultController.updateEntry`'s actual
+      implementation: `EntryEditView.save()` calls `controller.updateEntry(...)`
+      (fire-and-forget — the real write/re-open/mirror happens in a
+      `Task.detached`, only landing in `cachedContent`/`entries` inside a
+      later `MainActor.run` completion) and then synchronously calls
+      `onSave()` — which `EntryDetailView` wired to `reveal()`, reading
+      `cachedContent` well before that completion could possibly have run.
+      Real and reachable on every single edit that changes a password or
+      notes, not a rare race: the detail view kept showing the OLD value
+      after Save, with nothing ever re-triggering a correct re-reveal for
+      the same open entry (`.onAppear` doesn't refire on a same-identity
+      SwiftUI update, and nothing else called `reveal()` again) — risking a
+      user copying/viewing what looks like "the new password" but is
+      actually the old one, even though the vault file itself was correctly
+      updated. Fixed: `lastRefreshDate` (was `private`) now readable by
+      `EntryDetailView`, which reacts to it via `.onChange(of:)` — set in
+      the same `MainActor` completion that updates `cachedContent`, so this
+      re-reveals only once the new content is actually in place, instead of
+      immediately on save-request. The premature `onSave: reveal` callback
+      is now `onSave: {}` (matching `VaultBrowserView`'s own add-flow call
+      site, which was already a no-op) since the reactive `.onChange` now
+      correctly owns this responsibility. Compiled-only (`xcodebuild`) —
+      `VaultController`/`EntryDetailView` have no test target, same as
+      every other app-layer change in this ROADMAP.
 - [x] ~~`content.js`'s `formatValue` had dead code for a stand-alone
       `expirationYear` `<input>` field, always writing a 4-digit year
       regardless of what the field actually expects~~ — done, see
