@@ -362,6 +362,24 @@
       itself is unaffected by this — `#105` already restored both lockfiles, just
       correctly pinning `3.15.1`, not `4.x`; nothing to fix there. Revisit only if
       `KDBXKit` upstream widens its own `swift-crypto` range past `4.0.0` someday.
+      **Third correction (2026-09-12, same day): don't wait on upstream, fork it.**
+      The maintainer decided against leaving this indefinitely blocked on a third-party
+      maintainer's response. `shadone/KDBXKit#5` (issue) and `#6` (PR, the exact
+      one-line constraint widening, already carrying a full compatibility writeup and a
+      green build/test run against `4.5.2`) were closed upstream in favor of repointing
+      `KeeBridgeCore/Package.swift`'s `KDBXKit` dependency at
+      `https://github.com/tooming/KDBXKit.git`'s `widen-swift-crypto-constraint` branch
+      (revision `b010359337fef293a4a5138faba1fdf37839976f`) — exactly the prior pin
+      (`e9b8839f...`) plus only that one line, so not a downgrade or a drift from
+      upstream `develop`. Regenerated both `Package.resolved` files
+      (`swift package resolve` then `swift package update swift-crypto` — plain
+      `resolve` doesn't upgrade an already-satisfying pin, per the lockfile-refresh doc
+      above); both now actually pin `swift-crypto` at `4.5.2`, the first time either
+      lockfile has pinned `4.x` for real. `make ci` green (100/100 `swift test`, unsigned
+      `xcodebuild`, `VaultProbe` build). `#89` reopened and closed for real by this PR —
+      its literal checklist is now satisfied, not worked around. See
+      `docs/done/2026-09-12-swift-crypto-4x-fork-pin.md`. Revert to upstream if/when
+      `shadone/KDBXKit` ever merges the equivalent widening itself.
 - [x] ~~Credit card autofill: native-messaging vs. local-decrypt design spike (#3)~~ —
       done, see `docs/done/2026-08-26-card-autofill-design-spike.md`. Recommendation:
       local-decrypt via the same "unsandboxed app mirrors into the sandboxed extension's

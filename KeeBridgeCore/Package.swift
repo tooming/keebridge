@@ -13,27 +13,35 @@ let package = Package(
         ),
     ],
     dependencies: [
-        // KDBXKit gained tagged releases after this pin was first set (checked
-        // 2026-08-07: zero tags, single `develop` branch; re-checked 2026-09-08:
-        // v1.0.0-v1.3.0 now exist). The pinned revision below is still current --
-        // it's `develop`'s HEAD as of 2026-09-08, 41 commits ahead of v1.3.0's
-        // tagged commit -- so this is intentionally NOT a downgrade to the latest
-        // tag, just confirmation the tag's existence doesn't change what's
-        // actually newest. Pinning to a specific revision rather than `branch:`
-        // so this doesn't silently float to a future commit; a future cycle could
-        // reconsider tracking the newest tag once `develop` and tags converge,
-        // but switching now would regress 41 commits.
+        // Points at a personal fork, not upstream `shadone/KDBXKit`, to carry one patch
+        // upstream hasn't taken: widening KDBXKit's *own* swift-crypto constraint from
+        // `from: "3.0.0"` (SwiftPM: `>=3.0.0, <4.0.0`) to `"3.0.0"..<"5.0.0"`. SwiftPM
+        // resolves the intersection of every manifest's constraint across the whole
+        // graph, so no matter how wide this repo's own two manifests go (see the
+        // swift-crypto line below), KDBXKit's own narrower cap held the entire build
+        // below swift-crypto 4.0.0 regardless — see #89 (closed 2026-09-12 as
+        // blocked-upstream) and ROADMAP.md's swift-crypto bullet for the full trail.
+        // Filed shadone/KDBXKit#5 (issue) and #6 (PR, this exact one-line diff) upstream
+        // 2026-09-09; both closed 2026-09-12 in favor of this fork instead of waiting on
+        // a maintainer response — reopen that path and drop the fork if upstream ever
+        // merges the equivalent change.
+        //
+        // The pinned revision is the fork's `widen-swift-crypto-constraint` branch HEAD,
+        // which is exactly the *previous* pin (`e9b8839f...`, upstream `develop`'s HEAD
+        // as of 2026-09-08) plus only that one dependency-constraint line — not a
+        // downgrade or a drift from whatever else upstream `develop` contains.
         .package(
-            url: "https://github.com/shadone/KDBXKit.git",
-            revision: "e9b8839f1226b82665e1e4b7f12f13635d189deb"
+            url: "https://github.com/tooming/KDBXKit.git",
+            revision: "b010359337fef293a4a5138faba1fdf37839976f"
         ),
-        // Widened from `from: "3.0.0"` (which SwiftPM resolves as `>=3.0.0, <4.0.0` --
-        // never floats to a major version) after confirming with upstream swift-crypto's
-        // own README that 4.0.0's only breaking change vs. 1.x/2.x/3.x is new cases added
-        // to `CryptoError`, and this codebase never exhaustively switches over that type
+        // `"3.0.0"..<"5.0.0"`, not `from: "3.0.0"` (SwiftPM: `>=3.0.0, <4.0.0`, never
+        // floats across a major version) — confirmed with upstream swift-crypto's own
+        // README that 4.0.0's only breaking change vs. 1.x/2.x/3.x is new cases added to
+        // `CryptoError`, and this codebase never exhaustively switches over that type
         // (verified: zero matches for `CryptoError` outside this codebase's own
-        // `PasskeyCryptoError`). See ROADMAP.md's "Done" section for the investigation
-        // this bump is based on.
+        // `PasskeyCryptoError`). This range alone couldn't actually resolve to 4.x until
+        // the KDBXKit fork above also widened — see that comment. See ROADMAP.md's
+        // "Done" section for the investigation this bump is based on.
         .package(url: "https://github.com/apple/swift-crypto.git", "3.0.0"..<"5.0.0"),
     ],
     targets: [
