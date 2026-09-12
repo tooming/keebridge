@@ -218,6 +218,60 @@ private func makeVaultWithPasskeyEntry(at url: URL) throws -> String {
     _ = try PasskeyCrypto.sign(authenticatorData + clientDataHash, withPrivateKeyPEM: revealedPEM)
 }
 
+@Test func setPasskeyPreservesHistoryOfPriorState() throws {
+    // Regression test, mirroring updateEntryPreservesHistoryOfPriorStates:
+    // setPasskey mutated an entry's passkey fields in place with no
+    // history snapshot at all, silently breaking the same KDBXKit
+    // contract updateEntry's own history fix already established for this
+    // file ("every entry set or equivalent edit prepends a snapshot of
+    // the prior state here") — setPasskey's own doc comment says "sets
+    // (or overwrites)", and re-registering a passkey (e.g. after the
+    // private key was lost or revoked) is exactly that "overwrites" case,
+    // destroying the OLD credential ID/private key with no recovery path
+    // at all before this fix.
+    let service = VaultService()
+    let url = tempVaultURL()
+    defer { try? FileManager.default.removeItem(at: url) }
+    try service.createVault(at: url, masterPassword: testPassword, databaseName: "Test Vault")
+
+    let uuid = try service.createEntry(
+        VaultService.EntryDraft(title: "example.com", username: "alice", password: "s3cret"),
+        at: url, masterPassword: testPassword
+    )
+    let oldCredentialID = Data([0x01, 0x02])
+    let oldPrivateKeyPEM = "-----BEGIN PRIVATE KEY-----\nOLD-MOCK-KEY\n-----END PRIVATE KEY-----"
+    try service.setPasskey(
+        uuid: uuid, relyingParty: "example.com", credentialID: oldCredentialID,
+        privateKeyPEM: oldPrivateKeyPEM, at: url, masterPassword: testPassword
+    )
+
+    let newCredentialID = Data([0xAA, 0xBB])
+    let newPrivateKeyPEM = "-----BEGIN PRIVATE KEY-----\nNEW-MOCK-KEY\n-----END PRIVATE KEY-----"
+    try service.setPasskey(
+        uuid: uuid, relyingParty: "example.com", credentialID: newCredentialID,
+        privateKeyPEM: newPrivateKeyPEM, at: url, masterPassword: testPassword
+    )
+
+    let content = try service.openVault(at: url, masterPassword: testPassword)
+    let entry = try #require(content.database.root.group.entries.first { "\($0.uuid)" == uuid })
+
+    // Current state has the NEW passkey.
+    #expect(entry.passkeyCredentialID == newCredentialID)
+
+    // Oldest first: history[0] is the state right after createEntry (no
+    // passkey yet, before the first setPasskey), history[1] is the state
+    // after the first setPasskey (the OLD credential, before the second).
+    #expect(entry.history.count == 2)
+    #expect(entry.history[0].isPasskey == false)
+    #expect(entry.history[1].passkeyCredentialID == oldCredentialID)
+    #expect(entry.history[1].passkeyPrivateKeyPEM?.withRevealedString { $0 } == oldPrivateKeyPEM)
+    #expect(entry.history[0].history.isEmpty)
+    #expect(entry.history[1].history.isEmpty)
+
+    let historyFailures = entry.validate().filter { $0.message.localizedCaseInsensitiveContains("history") }
+    #expect(historyFailures.isEmpty)
+}
+
 // MARK: - mergeExtensionOriginatedPasskeys
 //
 // Simulates the scenario `docs/done/2026-08-31-passkey-registration-write-path-spike.md`
@@ -301,6 +355,65 @@ private func makeVaultWithPasskeyEntry(at url: URL) throws -> String {
         fromMirrorAt: mirrorURL, intoSourceAt: sourceURL, masterPassword: testPassword
     )
     #expect(secondMerge == 0)
+}
+
+@Test func mergeExtensionOriginatedPasskeysPreservesHistoryWhenOverwritingADifferentPasskey() throws {
+    // Regression test mirroring setPasskeyPreservesHistoryOfPriorState:
+    // this merge path shares setPasskey's own field-mutation shape (see
+    // this file's own doc comment: "same as setPasskey, which this
+    // mirrors") and had the exact same missing-history-snapshot gap.
+    // `!sourceAlreadyMatches` only skips entries where source already has
+    // this EXACT mirror credential — a source entry whose passkey
+    // differs from the mirror's (this test) still gets overwritten.
+    let service = VaultService()
+    let sourceURL = tempVaultURL()
+    let mirrorURL = tempVaultURL()
+    defer {
+        try? FileManager.default.removeItem(at: sourceURL)
+        try? FileManager.default.removeItem(at: mirrorURL)
+    }
+
+    try service.createVault(at: sourceURL, masterPassword: testPassword, databaseName: "Test Vault")
+    let draft = VaultService.EntryDraft(title: "example.com", username: "alice", password: "s3cret")
+    let uuid = try service.createEntry(draft, at: sourceURL, masterPassword: testPassword)
+
+    // Source independently gets a passkey first...
+    let oldCredentialID = Data([0x01, 0x02])
+    try service.setPasskey(
+        uuid: uuid, relyingParty: "example.com", credentialID: oldCredentialID,
+        privateKeyPEM: "-----BEGIN PRIVATE KEY-----\nOLD-MOCK-KEY\n-----END PRIVATE KEY-----",
+        at: sourceURL, masterPassword: testPassword
+    )
+
+    // ...then the mirror, copied AFTER that, independently gets a
+    // DIFFERENT passkey for the same entry (standing in for the extension
+    // registering a replacement credential).
+    try FileManager.default.copyItem(at: sourceURL, to: mirrorURL)
+    let newCredentialID = Data([0xAA, 0xBB])
+    try service.setPasskey(
+        uuid: uuid, relyingParty: "example.com", credentialID: newCredentialID,
+        privateKeyPEM: "-----BEGIN PRIVATE KEY-----\nNEW-MOCK-KEY\n-----END PRIVATE KEY-----",
+        at: mirrorURL, masterPassword: testPassword
+    )
+
+    let merged = try service.mergeExtensionOriginatedPasskeys(
+        fromMirrorAt: mirrorURL, intoSourceAt: sourceURL, masterPassword: testPassword
+    )
+    #expect(merged == 1)
+
+    let content = try service.openVault(at: sourceURL, masterPassword: testPassword)
+    let entry = try #require(content.database.root.group.entries.first { "\($0.uuid)" == uuid })
+
+    // Current state has the NEW (merged) credential.
+    #expect(entry.passkeyCredentialID == newCredentialID)
+
+    // History preserves the OLD credential's state — merging in a
+    // different passkey must not destroy it silently.
+    let priorPasskeyStates = entry.history.filter { $0.passkeyCredentialID == oldCredentialID }
+    #expect(priorPasskeyStates.count == 1)
+
+    let historyFailures = entry.validate().filter { $0.message.localizedCaseInsensitiveContains("history") }
+    #expect(historyFailures.isEmpty)
 }
 
 @Test func mergeExtensionOriginatedPasskeysReturnsZeroWhenMirrorHasNoPasskeys() throws {
