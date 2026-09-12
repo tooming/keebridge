@@ -1142,6 +1142,14 @@
       gate the runtime MCP tool surface and, if so, why it apparently didn't this run —
       not something fixable by a Swift change or a doc edit alone until the actual
       mechanism is confirmed. See #77 for full detail.
+
+      (`#77` was auto-closed by GitHub's merge-linking convention when PR #106 merged,
+      despite #106's own body explicitly stating "does not resolve #77... leaving #77
+      open for a maintainer to chase down" — the PR title's `(#77)` was enough to trigger
+      the auto-close regardless. Reopened this cycle, found via re-checking every issue
+      number this section cites against its live GitHub state, same cross-check pattern
+      a prior cycle used for `#5` below. No new information — #106 already said this
+      needed a human; it had just silently fallen out of the visible open-issues list.)
 - [x] ~~Decommission Proton Pass — final migration step (#5)~~ — done, by the maintainer's
       own hand: #5 was closed (`state_reason: completed`) on 2026-09-03. Marked `[x]` here
       (found via this run's GitHub-issue cross-check — every closed issue this ROADMAP
