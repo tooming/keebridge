@@ -284,6 +284,29 @@
       `docs/done/2026-09-08-swift-crypto-lockfile-refresh.md` for the actual fix (deleting
       both lockfiles to force a genuine fresh resolution) and the manual-step issue filed
       for restoring a committed, reproducible lockfile now correctly pinning `4.x`.
+      **Second correction (2026-09-12): the `4.x` pin is unreachable, not just
+      unregenerated.** `#89` (the manual-step issue this bullet's previous correction
+      filed) asked a human to run `swift package resolve` to land a `4.x` pin — but
+      `#105` (2026-09-09, restoring the two lockfiles for reproducibility after the
+      correction above deleted them) found that re-resolving both packages lands back
+      on `swift-crypto 3.15.1`, not `4.x`, regardless: `KDBXKit` (both at this repo's
+      pinned revision and, confirmed fresh this cycle by fetching its current `main`
+      branch's `Package.swift` directly, still on its latest commit today) declares its
+      own `swift-crypto` dependency as `from: "3.0.0"` with no wider override — SwiftPM
+      resolves the *intersection* of every manifest's constraint across the whole
+      dependency graph, so `KDBXKit`'s own implicit `<4.0.0` cap holds regardless of how
+      wide this repo's own two manifests go. No manual step available to any human
+      running commands in *this* repo can change that; it needs `KDBXKit` itself to
+      relax its constraint (or a fork/patch, which is out of scope). Found via a STEP 6b
+      re-survey (`ROADMAP.md`'s "Now / next" lane was otherwise fully checked off, and
+      `#89` was the one open non-`[Action needed]` issue): `#89`'s own "done when"
+      checklist can never be satisfied as written while this holds, so keeping it open
+      under the "manual step, a human just needs to run this" framing was actively
+      misleading — closed as not planned, see
+      `docs/done/2026-09-12-swift-crypto-4x-manual-step-closure.md`. Reproducibility
+      itself is unaffected by this — `#105` already restored both lockfiles, just
+      correctly pinning `3.15.1`, not `4.x`; nothing to fix there. Revisit only if
+      `KDBXKit` upstream widens its own `swift-crypto` range past `4.0.0` someday.
 - [x] ~~Credit card autofill: native-messaging vs. local-decrypt design spike (#3)~~ —
       done, see `docs/done/2026-08-26-card-autofill-design-spike.md`. Recommendation:
       local-decrypt via the same "unsandboxed app mirrors into the sandboxed extension's
