@@ -25,6 +25,31 @@
 
 ## Now / next
 
+- [x] ~~`content.js`'s `formatValue` had dead code for a stand-alone
+      `expirationYear` `<input>` field, always writing a 4-digit year
+      regardless of what the field actually expects~~ — done, see
+      `docs/done/2026-09-12-card-extension-expiration-year-format-fix.md`.
+      Found via a full read of `content.js` this cycle (not yet cited in
+      this ROADMAP at all): the `expirationYear` case's `HTMLSelectElement`
+      branch returns unconditionally, so the very next line's
+      `optionsUseTwoDigits = element instanceof HTMLSelectElement && ...`
+      could never be true by the time execution reached it — dead code,
+      always evaluating to `false`. The result: a plain-text year `<input>`
+      (e.g. a 2-digit `YY` field, distinct from the 4-digit case the
+      combined `expiration` field type already disambiguates via
+      `maxLength`/placeholder a few lines below) always got a synthesized
+      4-digit year with no way to detect it should be 2 digits — real,
+      reachable on any site with separate month/year text inputs expecting
+      a 2-digit year, a common card-form pattern. Fixed: replaced the dead
+      check with a real `maxLength`/placeholder heuristic (`maxLength ===
+      2`, or a `yy` placeholder token that isn't also `yyyy`), matching the
+      combined `expiration` case's existing style. No CI JS test/lint step
+      exists (only the Swift targets are built/tested) — verified via a
+      standalone Node script exercising the extracted formatting logic
+      against six value/maxLength/placeholder combinations, plus
+      `node --check` for a syntax sanity check, same
+      careful-reading-in-lieu-of-CI precedent the cross-origin-iframe card
+      fix already established for this file.
 - [x] ~~`setPasskey` and the extension-merge path never populated
       `entry.history`, unlike `updateEntry` after its own 2026-09-05
       fix~~ — done, see

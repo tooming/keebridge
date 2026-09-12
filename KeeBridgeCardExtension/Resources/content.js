@@ -267,9 +267,19 @@
           return optionDigits && optionDigits.slice(-2) === digits.slice(-2);
         })?.value || digits;
       }
-      const optionsUseTwoDigits = element instanceof HTMLSelectElement &&
-        [...element.options].some((option) => /^\d{2}$/.test(option.value));
-      return optionsUseTwoDigits ? digits.slice(-2) : (digits.length === 2 ? `20${digits}` : digits);
+      // Unlike expirationMonth (always exactly 2 digits, no ambiguity), a
+      // stand-alone year field can legitimately expect either 2 or 4
+      // digits — maxLength/placeholder are the same signals the combined
+      // `expiration` case below already uses to disambiguate a target
+      // field's own format. (A prior version of this check read `element
+      // instanceof HTMLSelectElement` here, but the HTMLSelectElement
+      // branch above already returns unconditionally, so that condition
+      // could never be true by the time execution reached this line —
+      // this always fell through to the plain-input case below with no
+      // actual 2-vs-4-digit detection at all.)
+      const placeholder = (element.getAttribute("placeholder") || "").toLowerCase();
+      const wantsTwoDigits = element.maxLength === 2 || (/\byy\b/.test(placeholder) && !placeholder.includes("yyyy"));
+      return wantsTwoDigits ? digits.slice(-2) : (digits.length === 2 ? `20${digits}` : digits);
     }
     if (type === "expiration") {
       const parts = value.match(/(\d{1,4})\D+(\d{1,4})/);
