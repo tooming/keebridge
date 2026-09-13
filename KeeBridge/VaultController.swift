@@ -725,6 +725,26 @@ final class VaultController: ObservableObject {
     private static let refreshThrottleInterval: TimeInterval = 15
 
     private func refreshIfStale() {
+        // `startWatching()`'s didBecomeActiveNotification observer is only ever
+        // (re-)registered from a successful unlock() — but `lock()` never tears
+        // it down, so it stays live and keeps firing on every later app
+        // activation even after the user explicitly locks. Without this guard,
+        // simply switching away from KeeBridge and back (no unlock/refresh
+        // button ever pressed) reaches refreshFromCache()'s no-cached-key
+        // branch, which reads Keychain (Touch ID, if the item is
+        // .biometryCurrentSet-protected) and, on success, sets isUnlocked =
+        // true and repopulates entries/the identity store — silently undoing
+        // the user's own Lock action from nothing more than app activation.
+        // This is a DIFFERENT gap from the generation-counter fix above (that
+        // one discards a refresh that was ALREADY in flight when lock() ran;
+        // this one is a BRAND NEW refresh cycle that only starts after lock()
+        // — generation alone can't catch it, since no further lock() call
+        // happens in between to bump it). The manual "Refresh from cached key"
+        // button in LockedView calls refreshFromCache() directly, not through
+        // this method, so it deliberately stays unaffected — pressing it while
+        // locked is explicit user intent to unlock via the cached key, exactly
+        // as documented at that call site.
+        guard isUnlocked else { return }
         if let lastRefreshDate, Date().timeIntervalSince(lastRefreshDate) < Self.refreshThrottleInterval {
             return
         }
