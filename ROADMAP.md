@@ -25,6 +25,35 @@
 
 ## Now / next
 
+- [x] ~~`VaultController.lock()`'s explicit Lock action could be silently
+      undone moments later by nothing more than switching back to the app~~
+      — done, see `docs/done/2026-09-13-vaultcontroller-lock-activation-refresh-fix.md`.
+      Found via a fresh, full re-read of `VaultController.swift` this cycle:
+      `startWatching()`'s `NSApplication.didBecomeActiveNotification`
+      observer is registered from `unlock()` but never torn down by
+      `lock()`, and `refreshIfStale()` (the automatic handler that observer
+      calls on every later activation) had no `isUnlocked` check at all —
+      only a 15s throttle. So locking, then merely switching away from
+      KeeBridge and back (no Unlock/Refresh button ever pressed), reached
+      `refreshFromCache()`'s no-cached-key branch: a real Keychain read
+      (Touch ID, if the item is `.biometryCurrentSet`-protected) that, on
+      success, set `isUnlocked = true` and repopulated `entries`/the
+      identity store — reverting the user's own Lock action with no new,
+      explicit authentication request. A different gap from the
+      2026-09-11 lock-race fix just below (that one discards a refresh
+      already in flight *when* `lock()` runs; this is a brand-new refresh
+      cycle that only starts *after* `lock()`, which the `generation`
+      counter can't catch since nothing bumps it again in between). Fixed
+      with one `guard isUnlocked else { return }` at the top of
+      `refreshIfStale()` — the manual "Refresh from cached key" button in
+      `LockedView` calls `refreshFromCache()` directly, not through this
+      method, so it deliberately keeps working while locked (that's its
+      whole point). Compiled-only (`xcodebuild`) — `VaultController` has no
+      test target, same as every other app-layer change in this ROADMAP;
+      this session's own sandbox is Linux with no Xcode/`xcodebuild` at
+      all, so this PR's `make build` step relies on `ci.yml`'s
+      `macos-latest` runner as the actual gate, confirmed green before
+      merging (see the self-review comment).
 - [x] ~~`EntryDetailView` re-revealed a saved entry's password/notes too
       early — before the async `updateEntry` write had actually landed —
       so it showed the stale, PRE-edit values indefinitely after every
