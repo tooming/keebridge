@@ -37,6 +37,29 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
+      # Package.resolved pins exact dependency revisions, so a stale/partial
+      # restore here only ever costs a cache miss (falls back through
+      # restore-keys or a clean build) — never a wrong/incompatible build.
+      - name: Cache SPM build artifacts
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            KeeBridgeCore/.build
+            VaultProbe/.build
+            ~/Library/Caches/org.swift.swiftpm
+          key: ${{ runner.os }}-spm-${{ hashFiles('**/Package.resolved') }}
+          restore-keys: |
+            ${{ runner.os }}-spm-
+      # Low-value but harmless: speeds up the "Install bats-core" step below
+      # on a cache hit; on a miss it just falls through to brew install as
+      # today.
+      - name: Cache Homebrew (bats-core)
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/Library/Caches/Homebrew
+          key: ${{ runner.os }}-brew-bats-core
+          restore-keys: |
+            ${{ runner.os }}-brew-
       - name: Fetch main for drift comparison
         run: git fetch --no-tags origin +refs/heads/main:refs/remotes/origin/main || true
       - name: Install bats-core
