@@ -60,12 +60,34 @@ jobs:
           key: ${{ runner.os }}-brew-bats-core
           restore-keys: |
             ${{ runner.os }}-brew-
+      # Not restored/saved on a hash miss the way the SPM cache above is -
+      # Xcode's own incremental build system (module cache, build
+      # description, indexing) is what actually reuses a restore-keys
+      # fallback hit partially, which is the whole point of caching
+      # DerivedData at all (an exact hashFiles match on real,
+      # actively-edited sources is rare in practice). That's also the
+      # known risk flagged in #162: reusing DerivedData across unrelated
+      # commits has occasionally produced stale/incorrect incremental
+      # Xcode builds. Mitigated here by being an UNSIGNED build
+      # (CODE_SIGNING_ALLOWED=NO in the Makefile) with its own real `make
+      # test`/`make build` outcome as the actual correctness gate - a
+      # flaky incremental build fails the job outright rather than
+      # silently shipping something wrong, so this is a CI-speed bet, not
+      # a correctness risk to production (no signed artifact is ever
+      # produced from this path).
+      - name: Cache Xcode DerivedData
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: DerivedData
+          key: ${{ runner.os }}-derived-data-${{ hashFiles('KeeBridge.xcodeproj/project.pbxproj', 'KeeBridge/**/*.swift', 'KeeBridgeCardExtension/**/*.swift', 'KeeBridgeProvider/**/*.swift', 'KeeBridgeCore/**/*.swift') }}
+          restore-keys: |
+            ${{ runner.os }}-derived-data-
       - name: Fetch main for drift comparison
         run: git fetch --no-tags origin +refs/heads/main:refs/remotes/origin/main || true
       - name: Install bats-core
         run: command -v bats || brew install bats-core
       - run: make test
-      - run: make build
+      - run: make build DERIVED_DATA_PATH=DerivedData
       - run: make probe-build
       - run: make routines-check
       - run: make routines-author-check
