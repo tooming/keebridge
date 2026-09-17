@@ -8,7 +8,7 @@ test: ## Run the KeeBridgeCore Swift package test suite (no signing needed)
 
 .PHONY: build
 build: ## Unsigned build of the app (embeds credential + card extensions) — CI-safe; signed builds need Xcode + the dev cert
-	@xcodebuild -project KeeBridge.xcodeproj -scheme KeeBridge -configuration Debug -destination 'platform=macOS' CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO build
+	@xcodebuild -project KeeBridge.xcodeproj -scheme KeeBridge -configuration Debug -destination 'platform=macOS' CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO $(if $(DERIVED_DATA_PATH),-derivedDataPath $(DERIVED_DATA_PATH),) build
 
 .PHONY: probe-build
 probe-build: ## Unsigned build of VaultProbe (SPM executable, incl. its swift-argument-parser subcommands) — not otherwise gated
