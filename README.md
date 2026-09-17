@@ -1,5 +1,10 @@
 # KeeBridge
 
+> **Deprecated, 2026-09-17.** This project is no longer maintained. The app has been
+> uninstalled from the maintainer's Mac and the autonomous-dev routine (see
+> [`routines/routines.yaml`](routines/routines.yaml)) is permanently retired. The code
+> remains here for reference, but expect no further development, fixes, or releases.
+
 A native macOS credential provider plus Safari Web Extension for KeePass-compatible (`.kdbx`) vaults — password, TOTP, passkey, and payment-card autofill backed by your own vault file instead of a cloud password manager.
 
 Built as a personal replacement for a commercial password manager, with the explicit goal of avoiding vendor lock-in: the vault is a plain `.kdbx` file (the same format KeePass/KeePassXC/Strongbox use), synced however you like (this project uses Google Drive), and editable in [KeePassXC](https://keepassxc.org/) — KeeBridge only ever reads it for autofill, it never becomes the only thing that can open your data.

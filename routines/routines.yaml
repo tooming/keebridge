@@ -40,12 +40,15 @@ routines:
   # per PR back-to-back (STEP 8 loop), self-reviews, and self-merges.
   - name: keebridge autonomous dev
     trigger_id: trig_01Uz7L38vBHmKpg7fd6Hm7Qx   # created 2026-08-25 via RemoteTrigger create — see README.md
-    cron: "0 10 * * *"   # 10:00 UTC — was the slot freed from k8s-anywhere (2026-08-25); freed again below, 2026-09-14
+    cron: "0 10 * * *"   # 10:00 UTC — dead cadence, kept only for the record; see retirement note below
     model: claude-sonnet-5
-    enabled: false   # PAUSED 2026-09-14, owner's direct request, to free this account-wide quota slot for
-    # easysportstream's new growth-mission routine (see that repo's routines/routines.yaml + BD-173).
-    # "For now" — not a permanent retirement of this repo's routine. Live trigger already disabled via
-    # RemoteTrigger update the same day this file changed; re-enable here + re-apply when resuming.
+    enabled: false   # RETIRED 2026-09-17, owner's direct request: the keebridge project itself is
+    # deprecated, not just this routine. This is a permanent retirement, not the temporary
+    # 2026-09-14 pause it replaces — do not re-enable. The RemoteTrigger tool exposed to Claude
+    # Code has no delete action (only list/get/create/update/run/webhook/list_runs/get_run_log),
+    # so the live trigger cannot be deleted from here; it stays disabled indefinitely instead.
+    # Confirmed via `RemoteTrigger get` on 2026-09-17 that the live trigger already matches
+    # (enabled:false) — no update call was needed.
     allowed_tools: [Bash, Read, Write, Edit, Glob, Grep]   # no RemoteTrigger — executor cannot self-apply routines.yaml changes
     prompt_file: executor.prompt.md   # the real contract — read live every run, no apply needed
     live_prompt: |

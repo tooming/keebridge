@@ -1,5 +1,10 @@
 # ROADMAP
 
+> **Deprecated, 2026-09-17.** The project is no longer maintained and the autonomous-dev
+> routine that worked this backlog is permanently retired (see
+> [`routines/routines.yaml`](routines/routines.yaml)). The list below is left as a
+> historical record, not an active backlog — nothing here will be picked up.
+
 > **AUTHORITATIVE.** Read together with [`docs/WAYS-OF-WORKING.md`](docs/WAYS-OF-WORKING.md)
 > (agent governance — merge/review rules) and
 > [`routines/executor.prompt.md`](routines/executor.prompt.md) (the operating contract:
